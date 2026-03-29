@@ -19,7 +19,9 @@
       "Bash(claude mcp:*)",
       "Bash(find c:/Barodaweb/ElevatePhase2/ElevateApp -name *aypal* -type f)",
       "Bash(find c:/Barodaweb/ElevatePhase2/ElevateApp/src/screen-groups -name *ayment* -o -name *aypal*)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(git credential-manager:*)",
+      "Bash(git config:*)"
     ]
   }
 }
