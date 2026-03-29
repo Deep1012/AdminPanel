@@ -8,9 +8,9 @@ const router = express.Router();
 
 router.post("/", authenticate, async (req, res) => {
   try {
-    const { job_number, raw_material_id, sizes, notes } = req.body;
+    const { job_number, raw_material_id, sizes, notes, job_date } = req.body;
     const id = uuidv4();
-    const now = new Date().toISOString();
+    const now = job_date || new Date().toISOString();
 
     const rawMaterial = await Purchase.findOne({ id: raw_material_id }, { _id: 0, __v: 0 });
     if (!rawMaterial) {

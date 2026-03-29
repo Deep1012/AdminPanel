@@ -2,13 +2,15 @@ import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Button } from './ui/button';
-import { 
-    LayoutDashboard, 
-    ShoppingCart, 
-    Printer, 
-    Factory, 
-    Truck, 
-    Settings, 
+import {
+    LayoutDashboard,
+    ShoppingCart,
+    Printer,
+    Factory,
+    Truck,
+    Settings,
+    Tag,
+    Ruler,
     LogOut,
     Menu,
     X,
@@ -22,7 +24,9 @@ const navItems = [
     { path: '/printing', label: 'PRINTING/COATING', icon: Printer },
     { path: '/production', label: 'PRODUCTION', icon: Factory },
     { path: '/dispatch', label: 'DISPATCH', icon: Truck },
-    { path: '/admin', label: 'ADMIN', icon: Settings, adminOnly: true },
+    { path: '/brands', label: 'BRANDS', icon: Tag },
+    { path: '/sizes', label: 'SIZES', icon: Ruler },
+    { path: '/admin', label: 'USERS', icon: Settings, adminOnly: true },
 ];
 
 export const Layout = ({ children }) => {

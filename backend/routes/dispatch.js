@@ -7,9 +7,9 @@ const router = express.Router();
 
 router.post("/", authenticate, async (req, res) => {
   try {
-    const { order_number, customer_name, brand_id, brand_name, size_id, size_name, quantity, delivery_address, notes } = req.body;
+    const { order_number, customer_name, brand_id, brand_name, size_id, size_name, quantity, delivery_address, notes, dispatch_date } = req.body;
     const id = uuidv4();
-    const now = new Date().toISOString();
+    const now = dispatch_date || new Date().toISOString();
 
     const entry = await Dispatch.create({
       id,
@@ -44,10 +44,19 @@ router.get("/", authenticate, async (req, res) => {
 
 router.put("/:dispatchId", authenticate, async (req, res) => {
   try {
-    const { status, notes } = req.body;
+    const { status, notes, order_number, customer_name, brand_id, brand_name, size_id, size_name, quantity, delivery_address, dispatch_date } = req.body;
     const updateData = {};
     if (status !== undefined) updateData.status = status;
     if (notes !== undefined) updateData.notes = notes;
+    if (order_number !== undefined) updateData.order_number = order_number;
+    if (customer_name !== undefined) updateData.customer_name = customer_name;
+    if (brand_id !== undefined) updateData.brand_id = brand_id;
+    if (brand_name !== undefined) updateData.brand_name = brand_name;
+    if (size_id !== undefined) updateData.size_id = size_id;
+    if (size_name !== undefined) updateData.size_name = size_name;
+    if (quantity !== undefined) updateData.quantity = quantity;
+    if (delivery_address !== undefined) updateData.delivery_address = delivery_address;
+    if (dispatch_date !== undefined) updateData.dispatch_date = dispatch_date;
 
     if (Object.keys(updateData).length === 0) {
       return res.status(400).json({ detail: "No fields to update" });

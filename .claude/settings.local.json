@@ -21,7 +21,8 @@
       "Bash(find c:/Barodaweb/ElevatePhase2/ElevateApp/src/screen-groups -name *ayment* -o -name *aypal*)",
       "WebSearch",
       "Bash(git credential-manager:*)",
-      "Bash(git config:*)"
+      "Bash(git config:*)",
+      "Bash(taskkill /F /IM node.exe)"
     ]
   }
 }

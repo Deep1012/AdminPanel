@@ -10,6 +10,8 @@ import Printing from './pages/Printing';
 import Production from './pages/Production';
 import Dispatch from './pages/Dispatch';
 import Admin from './pages/Admin';
+import Brands from './pages/Brands';
+import Sizes from './pages/Sizes';
 import './App.css';
 
 // Protected Route component
@@ -85,6 +87,16 @@ function AppRoutes() {
             <Route path="/dispatch" element={
                 <ProtectedRoute>
                     <Dispatch />
+                </ProtectedRoute>
+            } />
+            <Route path="/brands" element={
+                <ProtectedRoute>
+                    <Brands />
+                </ProtectedRoute>
+            } />
+            <Route path="/sizes" element={
+                <ProtectedRoute>
+                    <Sizes />
                 </ProtectedRoute>
             } />
             <Route path="/admin" element={

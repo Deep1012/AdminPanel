@@ -7,9 +7,9 @@ const router = express.Router();
 
 router.post("/", authenticate, async (req, res) => {
   try {
-    const { sr_no, gauge, size1, size2, temper, weight, supplier, invoice_number } = req.body;
+    const { sr_no, gauge, size1, size2, temper, weight, supplier, invoice_number, purchase_date } = req.body;
     const id = uuidv4();
-    const now = new Date().toISOString();
+    const now = purchase_date || new Date().toISOString();
 
     // Calculate No of Sheets: WEIGHT / (GAUGE * SIZE1 * SIZE2 / 100000 * 0.785)
     const divisor = (gauge * size1 * size2 / 100000) * 0.785;
@@ -78,6 +78,49 @@ router.get("/available", authenticate, async (req, res) => {
       }
     }
     res.json(available);
+  } catch (error) {
+    res.status(500).json({ detail: error.message });
+  }
+});
+
+router.put("/:purchaseId", authenticate, async (req, res) => {
+  try {
+    const { sr_no, gauge, size1, size2, temper, weight, supplier, invoice_number, purchase_date } = req.body;
+    const updateData = {};
+    if (sr_no !== undefined) updateData.sr_no = sr_no;
+    if (temper !== undefined) updateData.temper = temper;
+    if (supplier !== undefined) updateData.supplier = supplier;
+    if (invoice_number !== undefined) updateData.invoice_number = invoice_number;
+    if (purchase_date !== undefined) updateData.purchase_date = purchase_date;
+
+    // Recalculate sheets if dimensions/weight changed
+    if (gauge !== undefined || size1 !== undefined || size2 !== undefined || weight !== undefined) {
+      const existing = await Purchase.findOne({ id: req.params.purchaseId }).lean();
+      if (!existing) return res.status(404).json({ detail: "Purchase not found" });
+
+      const g = gauge !== undefined ? gauge : existing.gauge;
+      const s1 = size1 !== undefined ? size1 : existing.size1;
+      const s2 = size2 !== undefined ? size2 : existing.size2;
+      const w = weight !== undefined ? weight : existing.weight;
+
+      if (gauge !== undefined) updateData.gauge = g;
+      if (size1 !== undefined) updateData.size1 = s1;
+      if (size2 !== undefined) updateData.size2 = s2;
+      if (weight !== undefined) updateData.weight = w;
+
+      const divisor = (g * s1 * s2 / 100000) * 0.785;
+      const no_of_sheets = divisor > 0 ? Math.floor(w / divisor) : 0;
+      updateData.no_of_sheets = no_of_sheets;
+      updateData.sheets_available = no_of_sheets - (existing.sheets_used || 0);
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ detail: "No fields to update" });
+    }
+
+    const result = await Purchase.updateOne({ id: req.params.purchaseId }, { $set: updateData });
+    if (result.matchedCount === 0) return res.status(404).json({ detail: "Purchase not found" });
+    res.json({ message: "Purchase updated successfully" });
   } catch (error) {
     res.status(500).json({ detail: error.message });
   }

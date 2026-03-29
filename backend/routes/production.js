@@ -7,9 +7,9 @@ const router = express.Router();
 
 router.post("/", authenticate, async (req, res) => {
   try {
-    const { brand_id, brand_name, size_id, size_name, quantity_produced, printing_stock_used = 0, printing_job_id, notes } = req.body;
+    const { brand_id, brand_name, size_id, size_name, quantity_produced, printing_stock_used = 0, printing_job_id, notes, production_date } = req.body;
     const id = uuidv4();
-    const now = new Date().toISOString();
+    const now = production_date || new Date().toISOString();
 
     const entry = await Production.create({
       id,
@@ -40,6 +40,31 @@ router.get("/", authenticate, async (req, res) => {
       return obj;
     });
     res.json(result);
+  } catch (error) {
+    res.status(500).json({ detail: error.message });
+  }
+});
+
+router.put("/:prodId", authenticate, async (req, res) => {
+  try {
+    const { brand_id, brand_name, size_id, size_name, quantity_produced, printing_stock_used, notes, production_date } = req.body;
+    const updateData = {};
+    if (brand_id !== undefined) updateData.brand_id = brand_id;
+    if (brand_name !== undefined) updateData.brand_name = brand_name;
+    if (size_id !== undefined) updateData.size_id = size_id;
+    if (size_name !== undefined) updateData.size_name = size_name;
+    if (quantity_produced !== undefined) updateData.quantity_produced = quantity_produced;
+    if (printing_stock_used !== undefined) updateData.printing_stock_used = printing_stock_used;
+    if (notes !== undefined) updateData.notes = notes;
+    if (production_date !== undefined) updateData.production_date = production_date;
+
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ detail: "No fields to update" });
+    }
+
+    const result = await Production.updateOne({ id: req.params.prodId }, { $set: updateData });
+    if (result.matchedCount === 0) return res.status(404).json({ detail: "Production entry not found" });
+    res.json({ message: "Production entry updated successfully" });
   } catch (error) {
     res.status(500).json({ detail: error.message });
   }

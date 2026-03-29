@@ -26,6 +26,18 @@ router.get("/", authenticate, async (req, res) => {
   }
 });
 
+router.put("/:sizeId", authenticate, adminRequired, async (req, res) => {
+  try {
+    const { name } = req.body;
+    if (!name) return res.status(400).json({ detail: "Name is required" });
+    const result = await Size.updateOne({ id: req.params.sizeId }, { $set: { name } });
+    if (result.matchedCount === 0) return res.status(404).json({ detail: "Size not found" });
+    res.json({ message: "Size updated successfully" });
+  } catch (error) {
+    res.status(500).json({ detail: error.message });
+  }
+});
+
 router.delete("/:sizeId", authenticate, adminRequired, async (req, res) => {
   try {
     const result = await Size.deleteOne({ id: req.params.sizeId });
