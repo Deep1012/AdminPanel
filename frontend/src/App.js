@@ -13,6 +13,10 @@ import Admin from './pages/Admin';
 import PurchaseOrders from './pages/PurchaseOrders';
 import Brands from './pages/Brands';
 import Sizes from './pages/Sizes';
+import Customers from './pages/Customers';
+import RawMaterialStock from './pages/RawMaterialStock';
+import PrintingStock from './pages/PrintingStock';
+import FinishedGoods from './pages/FinishedGoods';
 import './App.css';
 
 // Protected Route component
@@ -70,6 +74,21 @@ function AppRoutes() {
                     <Dashboard />
                 </ProtectedRoute>
             } />
+            <Route path="/raw-material-stock" element={
+                <ProtectedRoute>
+                    <RawMaterialStock />
+                </ProtectedRoute>
+            } />
+            <Route path="/printing-stock" element={
+                <ProtectedRoute>
+                    <PrintingStock />
+                </ProtectedRoute>
+            } />
+            <Route path="/finished-goods" element={
+                <ProtectedRoute>
+                    <FinishedGoods />
+                </ProtectedRoute>
+            } />
             <Route path="/purchase-orders" element={
                 <ProtectedRoute>
                     <PurchaseOrders />
@@ -103,6 +122,11 @@ function AppRoutes() {
             <Route path="/sizes" element={
                 <ProtectedRoute>
                     <Sizes />
+                </ProtectedRoute>
+            } />
+            <Route path="/customers" element={
+                <ProtectedRoute adminOnly>
+                    <Customers />
                 </ProtectedRoute>
             } />
             <Route path="/admin" element={

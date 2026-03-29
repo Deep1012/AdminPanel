@@ -22,8 +22,7 @@ router.get("/stats", authenticate, async (req, res) => {
     const total_sheets_available = purchases.reduce((sum, p) => sum + ((p.no_of_sheets || 0) - (p.sheets_used || 0)), 0);
     const total_weight = purchases.reduce((sum, p) => sum + (p.weight || 0), 0);
 
-    const pending_jobs = printingJobs.filter(j => j.status === "pending").length;
-    const completed_jobs = printingJobs.filter(j => j.status === "completed").length;
+    const total_jobs = printingJobs.length;
     let total_printing_stock = 0;
     for (const job of printingJobs) {
       total_printing_stock += (job.total_bodies || 0) * (job.sheets_from_material || 0);
@@ -31,12 +30,9 @@ router.get("/stats", authenticate, async (req, res) => {
     const total_printing_used = production.reduce((sum, p) => sum + (p.printing_stock_used || 0), 0);
 
     const total_finished_goods = production.reduce((sum, p) => sum + (p.quantity_produced || 0), 0);
-    const total_dispatched = dispatches.filter(d => ["dispatched", "delivered"].includes(d.status)).reduce((sum, d) => sum + (d.quantity || 0), 0);
-    const pending_orders = dispatches.filter(d => d.status === "pending").length;
+    const total_dispatched = dispatches.reduce((sum, d) => sum + (d.quantity || 0), 0);
 
-    const po_pending = purchaseOrders.filter(po => ["received", "confirmed"].includes(po.status)).length;
-    const po_in_production = purchaseOrders.filter(po => po.status === "in_production").length;
-    const po_ready = purchaseOrders.filter(po => po.status === "ready").length;
+    const po_total_quantity = purchaseOrders.reduce((sum, po) => sum + (po.quantity || 0), 0);
 
     // Compute trends (last 30 days vs previous 30 days)
     const now = new Date();
@@ -55,8 +51,8 @@ router.get("/stats", authenticate, async (req, res) => {
         previous: purchases.filter(p => inRange(p.purchase_date, sixtyDaysAgo, thirtyDaysAgo)).length,
       },
       printing: {
-        current: printingJobs.filter(j => j.status === "completed" && inRange(j.job_date, thirtyDaysAgo, now)).length,
-        previous: printingJobs.filter(j => j.status === "completed" && inRange(j.job_date, sixtyDaysAgo, thirtyDaysAgo)).length,
+        current: printingJobs.filter(j => inRange(j.job_date, thirtyDaysAgo, now)).length,
+        previous: printingJobs.filter(j => inRange(j.job_date, sixtyDaysAgo, thirtyDaysAgo)).length,
       },
       production: {
         current: production.filter(p => inRange(p.production_date, thirtyDaysAgo, now)).reduce((s, p) => s + (p.quantity_produced || 0), 0),
@@ -74,10 +70,10 @@ router.get("/stats", authenticate, async (req, res) => {
 
     res.json({
       purchase: { total_sheets, total_sheets_available, total_weight, total_items: purchases.length },
-      printing_coating: { total_printing_stock, printing_stock_available: total_printing_stock - total_printing_used, pending_jobs, completed_jobs },
+      printing_coating: { total_printing_stock, printing_stock_available: total_printing_stock - total_printing_used, total_jobs },
       finished_goods: { total_produced: total_finished_goods, available_stock: total_finished_goods - total_dispatched },
-      dispatch: { total_dispatched, pending_orders, total_items: dispatches.length },
-      purchase_orders: { total: purchaseOrders.length, pending: po_pending, in_production: po_in_production, ready: po_ready },
+      dispatch: { total_dispatched, total_items: dispatches.length },
+      purchase_orders: { total: purchaseOrders.length, total_quantity: po_total_quantity },
       trends,
     });
   } catch (error) {
@@ -164,20 +160,6 @@ router.get("/production-trend", authenticate, async (req, res) => {
   }
 });
 
-// Dispatch distribution by status
-router.get("/dispatch-distribution", authenticate, async (req, res) => {
-  try {
-    const dispatches = await Dispatch.find({}, { status: 1, _id: 0 }).lean();
-    const counts = { pending: 0, dispatched: 0, delivered: 0 };
-    for (const d of dispatches) {
-      if (counts[d.status] !== undefined) counts[d.status]++;
-    }
-    res.json(Object.entries(counts).map(([status, count]) => ({ status, count })));
-  } catch (error) {
-    res.status(500).json({ detail: error.message });
-  }
-});
-
 // Recent activity - last 10 entries across all modules
 router.get("/recent-activity", authenticate, async (req, res) => {
   try {
@@ -207,15 +189,14 @@ router.get("/recent-activity", authenticate, async (req, res) => {
 // PO summary for dashboard
 router.get("/po-summary", authenticate, async (req, res) => {
   try {
-    const pendingStatuses = ["received", "confirmed", "in_production", "ready"];
-    const pendingOrders = await PurchaseOrder.find(
-      { status: { $in: pendingStatuses } },
+    const allOrders = await PurchaseOrder.find(
+      {},
       { _id: 0, __v: 0 }
     ).sort({ date: -1 }).lean();
 
     res.json({
-      pending_count: pendingOrders.length,
-      latest: pendingOrders.slice(0, 5),
+      total_count: allOrders.length,
+      latest: allOrders.slice(0, 5),
     });
   } catch (error) {
     res.status(500).json({ detail: error.message });
@@ -261,10 +242,8 @@ router.get("/finished-goods-list", authenticate, async (req, res) => {
       stockMap[key].produced += p.quantity_produced || 0;
     }
     for (const d of dispatches) {
-      if (["dispatched", "delivered"].includes(d.status)) {
-        const key = `${d.size_name || ""}_${d.brand_name || ""}`;
-        if (stockMap[key]) stockMap[key].dispatched += d.quantity || 0;
-      }
+      const key = `${d.size_name || ""}_${d.brand_name || ""}`;
+      if (stockMap[key]) stockMap[key].dispatched += d.quantity || 0;
     }
     for (const key of Object.keys(stockMap)) stockMap[key].available = stockMap[key].produced - stockMap[key].dispatched;
     res.json(Object.values(stockMap));

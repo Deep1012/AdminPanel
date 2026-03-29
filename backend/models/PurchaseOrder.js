@@ -11,11 +11,7 @@ const purchaseOrderSchema = new mongoose.Schema(
     size_id: { type: String, required: true },
     size_name: { type: String, required: true },
     quantity: { type: Number, required: true, min: 1 },
-    status: {
-      type: String,
-      enum: ["received", "confirmed", "in_production", "ready", "dispatched", "delivered"],
-      default: "received",
-    },
+    quantity_dispatched: { type: Number, default: 0 },
     notes: { type: String, default: null },
     dispatch_id: { type: String, default: null },
     created_by: { type: String, required: true },
@@ -25,6 +21,5 @@ const purchaseOrderSchema = new mongoose.Schema(
 );
 
 purchaseOrderSchema.index({ date: -1 });
-purchaseOrderSchema.index({ status: 1 });
 
 module.exports = mongoose.model("PurchaseOrder", purchaseOrderSchema);

@@ -13,7 +13,7 @@ import TablePagination from '../components/TablePagination';
 import { useTableFilter } from '../hooks/useTableFilter';
 import { usePagination } from '../hooks/usePagination';
 import { printingAPI, brandsAPI, sizesAPI, purchaseAPI } from '../lib/api';
-import { formatDate, formatNumber, getStatusColor } from '../lib/utils';
+import { formatDate, formatNumber } from '../lib/utils';
 import { Plus, Trash2, Pencil, Printer, Loader2, AlertCircle, Layers, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { exportToExcel } from '../lib/exportToExcel';
@@ -24,9 +24,10 @@ const PRINTING_EXPORT_COLUMNS = [
     { header: 'Raw Material', key: 'raw_material_sr_no' },
     { header: 'Material Size', key: 'raw_material_size' },
     { header: 'Sheets', key: 'sheets_from_material' },
-    { header: 'Sizes & Brands', key: 'sizes', transform: (v) => (v || []).map(s => `${s.size_name}: ${(s.brands || []).map(b => b.brand_name).join(', ')}`).join(' | ') },
-    { header: 'Total Bodies', key: 'total_bodies' },
-    { header: 'Status', key: 'status' },
+    { header: 'Size', key: 'size_name' },
+    { header: 'Brand', key: 'brand_name' },
+    { header: 'Bodies', key: 'bodies_count' },
+    { header: 'Total Printing', key: 'total_printing' },
     { header: 'Created By', key: 'created_by' },
 ];
 
@@ -41,7 +42,7 @@ const Printing = () => {
     const [submitting, setSubmitting] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState(null);
 
-    const [formData, setFormData] = useState({ job_number: '', raw_material_id: '', notes: '', job_date: new Date().toISOString().split('T')[0] });
+    const [formData, setFormData] = useState({ raw_material_id: '', notes: '', job_date: new Date().toISOString().split('T')[0] });
     const [selectedMaterial, setSelectedMaterial] = useState(null);
     const [jobEntries, setJobEntries] = useState([]);
     const [currentSizeId, setCurrentSizeId] = useState('');
@@ -49,18 +50,43 @@ const Printing = () => {
     const [currentBodiesCount, setCurrentBodiesCount] = useState('');
 
     const [editingId, setEditingId] = useState(null);
-    const [editForm, setEditForm] = useState({ status: '', notes: '' });
+    const [editForm, setEditForm] = useState({ notes: '' });
 
     // Search & filter
     const [searchTerm, setSearchTerm] = useState('');
-    const [filterStatus, setFilterStatus] = useState('');
 
-    const filters = useMemo(() => [
-        ...(filterStatus ? [{ key: 'status', value: filterStatus, type: 'exact' }] : []),
-    ], [filterStatus]);
+    const filters = useMemo(() => [], []);
+
+    // Flatten jobs: each size+brand combo = one row
+    const flattenedRows = useMemo(() => {
+        const rows = [];
+        for (const job of jobs) {
+            const sheets = job.sheets_from_material || 0;
+            for (const sizeEntry of (job.sizes || [])) {
+                for (const brand of (sizeEntry.brands || [])) {
+                    rows.push({
+                        _rowKey: `${job.id}_${sizeEntry.size_id}_${brand.brand_id}`,
+                        id: job.id,
+                        job_date: job.job_date,
+                        job_number: job.job_number,
+                        raw_material_sr_no: job.raw_material_sr_no,
+                        raw_material_size: job.raw_material_size,
+                        sheets_from_material: sheets,
+                        size_name: sizeEntry.size_name,
+                        brand_name: brand.brand_name,
+                        bodies_count: brand.bodies_count || 0,
+                        total_printing: (brand.bodies_count || 0) * sheets,
+                        created_by: job.created_by,
+                        notes: job.notes,
+                    });
+                }
+            }
+        }
+        return rows;
+    }, [jobs]);
 
     const filteredJobs = useTableFilter({
-        data: jobs, searchTerm, searchFields: ['job_number', 'raw_material_sr_no'], filters
+        data: flattenedRows, searchTerm, searchFields: ['job_number', 'raw_material_sr_no', 'size_name', 'brand_name'], filters
     });
 
     const { paginatedData: paginatedJobs, currentPage, totalPages, pageSize, setCurrentPage, setPageSize, startIndex, PAGE_SIZE_OPTIONS } = usePagination({ data: filteredJobs });
@@ -79,7 +105,7 @@ const Printing = () => {
     };
 
     const resetForm = () => {
-        setFormData({ job_number: '', raw_material_id: '', notes: '', job_date: new Date().toISOString().split('T')[0] });
+        setFormData({ raw_material_id: '', notes: '', job_date: new Date().toISOString().split('T')[0] });
         setSelectedMaterial(null); setJobEntries([]); setCurrentSizeId(''); setCurrentBrandId(''); setCurrentBodiesCount('');
     };
 
@@ -101,8 +127,8 @@ const Printing = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!formData.job_number || !formData.raw_material_id || jobEntries.length === 0) {
-            toast.error('Please fill job number, select raw material, and add at least one entry'); return;
+        if (!formData.raw_material_id || jobEntries.length === 0) {
+            toast.error('Please select raw material and add at least one entry'); return;
         }
         const sizesMap = {};
         jobEntries.forEach(entry => {
@@ -112,7 +138,7 @@ const Printing = () => {
         setSubmitting(true);
         try {
             await printingAPI.create({
-                job_number: formData.job_number, raw_material_id: formData.raw_material_id,
+                raw_material_id: formData.raw_material_id,
                 sizes: Object.values(sizesMap), notes: formData.notes || null,
                 job_date: new Date(formData.job_date).toISOString(),
             });
@@ -121,19 +147,14 @@ const Printing = () => {
         finally { setSubmitting(false); }
     };
 
-    const openEdit = (job) => { setEditingId(job.id); setEditForm({ status: job.status || 'pending', notes: job.notes || '' }); setEditDialogOpen(true); };
+    const openEdit = (job) => { setEditingId(job.id); setEditForm({ notes: job.notes || '' }); setEditDialogOpen(true); };
 
     const handleEditSubmit = async (e) => {
         e.preventDefault();
         setSubmitting(true);
-        try { await printingAPI.update(editingId, { status: editForm.status, notes: editForm.notes || null }); toast.success('Job updated'); setEditDialogOpen(false); fetchData(); }
+        try { await printingAPI.update(editingId, { notes: editForm.notes || null }); toast.success('Job updated'); setEditDialogOpen(false); fetchData(); }
         catch (err) { toast.error('Failed to update job'); }
         finally { setSubmitting(false); }
-    };
-
-    const handleStatusChange = async (jobId, newStatus) => {
-        try { await printingAPI.update(jobId, { status: newStatus }); toast.success('Status updated'); fetchData(); }
-        catch (err) { toast.error('Failed to update status'); }
     };
 
     const handleDelete = async () => {
@@ -143,7 +164,7 @@ const Printing = () => {
         finally { setDeleteTarget(null); }
     };
 
-    const clearFilters = () => { setSearchTerm(''); setFilterStatus(''); };
+    const clearFilters = () => { setSearchTerm(''); };
     const getTotalBodies = () => jobEntries.reduce((sum, e) => sum + e.bodies_count, 0);
 
     return (
@@ -173,20 +194,14 @@ const Printing = () => {
                             <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Date *</Label>
                             <Input type="date" value={formData.job_date} onChange={(e) => setFormData({ ...formData, job_date: e.target.value })} className="bg-background border-input rounded-sm font-mono" data-testid="job-date" />
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Job Number *</Label>
-                                <Input value={formData.job_number} onChange={(e) => setFormData({ ...formData, job_number: e.target.value })} placeholder="JOB-001" className="bg-background border-input rounded-sm font-mono" data-testid="job-number" />
-                            </div>
-                            <div className="space-y-2">
-                                <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Raw Material *</Label>
-                                <Select value={formData.raw_material_id} onValueChange={handleMaterialChange}>
-                                    <SelectTrigger className="bg-background border-input rounded-sm" data-testid="raw-material-select"><SelectValue placeholder="Select raw material" /></SelectTrigger>
-                                    <SelectContent className="bg-card border-border rounded-sm">
-                                        {availableMaterials.length === 0 ? <div className="p-2 text-sm text-muted-foreground">No available materials</div> : availableMaterials.map(m => <SelectItem key={m.id} value={m.id}>{m.display_name}</SelectItem>)}
-                                    </SelectContent>
-                                </Select>
-                            </div>
+                        <div className="space-y-2">
+                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Raw Material *</Label>
+                            <Select value={formData.raw_material_id} onValueChange={handleMaterialChange}>
+                                <SelectTrigger className="bg-background border-input rounded-sm" data-testid="raw-material-select"><SelectValue placeholder="Select raw material" /></SelectTrigger>
+                                <SelectContent className="bg-card border-border rounded-sm">
+                                    {availableMaterials.length === 0 ? <div className="p-2 text-sm text-muted-foreground">No available materials</div> : availableMaterials.map(m => <SelectItem key={m.id} value={m.id}>{m.display_name}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
                         </div>
                         {selectedMaterial && (
                             <div className="p-3 bg-primary/10 rounded-sm border border-primary/20 grid grid-cols-3 gap-4 text-sm">
@@ -227,6 +242,12 @@ const Printing = () => {
                                     <span className="font-bold uppercase tracking-wider">Total Bodies</span>
                                     <span className="font-mono font-bold text-success">{formatNumber(getTotalBodies())}</span>
                                 </div>
+                                {selectedMaterial && (
+                                    <div className="flex justify-between text-sm p-2 bg-primary/10 rounded-sm border border-primary/20">
+                                        <span className="font-bold uppercase tracking-wider">Total Printing (Bodies × Sheets)</span>
+                                        <span className="font-mono font-bold text-primary">{formatNumber(getTotalBodies() * (selectedMaterial.sheets_available || 0))}</span>
+                                    </div>
+                                )}
                             </div>
                         )}
                         <div className="space-y-2">
@@ -246,17 +267,6 @@ const Printing = () => {
                     <DialogHeader><DialogTitle className="font-display text-xl font-bold tracking-tight uppercase">Edit Printing Job</DialogTitle></DialogHeader>
                     <form onSubmit={handleEditSubmit} className="space-y-4 mt-4">
                         <div className="space-y-2">
-                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Status</Label>
-                            <Select value={editForm.status} onValueChange={(v) => setEditForm({ ...editForm, status: v })}>
-                                <SelectTrigger className="bg-background border-input rounded-sm"><SelectValue /></SelectTrigger>
-                                <SelectContent className="bg-card border-border rounded-sm">
-                                    <SelectItem value="pending">Pending</SelectItem>
-                                    <SelectItem value="in_progress">In Progress</SelectItem>
-                                    <SelectItem value="completed">Completed</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div className="space-y-2">
                             <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Notes</Label>
                             <Textarea value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} placeholder="Optional notes..." className="bg-background border-input rounded-sm" />
                         </div>
@@ -269,9 +279,8 @@ const Printing = () => {
 
             <ConfirmDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)} title="Delete Printing Job?" description="This will permanently remove this printing job." onConfirm={handleDelete} />
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Card className="industrial-card"><CardContent className="p-4"><div className="flex items-center gap-3"><div className="p-2 bg-primary/10 rounded-sm border border-primary/20"><Printer className="w-5 h-5 text-primary" /></div><div><p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Total Jobs</p><p className="font-display text-2xl font-bold">{jobs.length}</p></div></div></CardContent></Card>
-                <Card className="industrial-card"><CardContent className="p-4"><div className="flex items-center gap-3"><div className="p-2 bg-warning/10 rounded-sm border border-warning/20"><Printer className="w-5 h-5 text-warning" /></div><div><p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Pending Jobs</p><p className="font-display text-2xl font-bold">{jobs.filter(j => j.status === 'pending').length}</p></div></div></CardContent></Card>
                 <Card className="industrial-card"><CardContent className="p-4"><div className="flex items-center gap-3"><div className="p-2 bg-success/10 rounded-sm border border-success/20"><Layers className="w-5 h-5 text-success" /></div><div><p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Total Bodies</p><p className="font-display text-2xl font-bold">{formatNumber(jobs.reduce((sum, j) => sum + j.total_bodies, 0))}</p></div></div></CardContent></Card>
             </div>
 
@@ -281,14 +290,10 @@ const Printing = () => {
                     searchValue={searchTerm}
                     onSearchChange={setSearchTerm}
                     searchPlaceholder="Search by job #, raw material..."
-                    filters={[
-                        { key: 'status', label: 'Status', type: 'select', options: [
-                            { value: 'pending', label: 'Pending' }, { value: 'in_progress', label: 'In Progress' }, { value: 'completed', label: 'Completed' }
-                        ], value: filterStatus, onChange: setFilterStatus },
-                    ]}
+                    filters={[]}
                     onClear={clearFilters}
                     resultCount={filteredJobs.length}
-                    totalCount={jobs.length}
+                    totalCount={flattenedRows.length}
                 />
                 <CardContent className="p-0">
                     {loading ? (
@@ -298,32 +303,24 @@ const Printing = () => {
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="data-table" data-testid="jobs-table">
-                                <thead><tr><th>Date</th><th>Job #</th><th>Raw Material</th><th>Material Size</th><th>Sheets</th><th>Sizes & Brands</th><th>Total Bodies</th><th>Status</th><th>By</th><th></th></tr></thead>
+                                <thead><tr><th>Date</th><th>Job #</th><th>Raw Material</th><th>Material Size</th><th>Sheets</th><th>Size</th><th>Brand</th><th>Bodies</th><th>Total Printing</th><th>By</th><th></th></tr></thead>
                                 <tbody>
-                                    {paginatedJobs.map((job) => (
-                                        <tr key={job.id} data-testid={`job-row-${job.id}`}>
-                                            <td>{formatDate(job.job_date)}</td>
-                                            <td className="font-medium">{job.job_number}</td>
-                                            <td>{job.raw_material_sr_no}</td>
-                                            <td>{job.raw_material_size}</td>
-                                            <td className="font-mono">{formatNumber(job.sheets_from_material)}</td>
-                                            <td><div className="flex flex-wrap gap-1 max-w-xs">{job.sizes?.map((s, i) => (<Badge key={i} variant="outline" className="text-xs">{s.size_name}: {s.brands?.map(b => b.brand_name).join(', ')}</Badge>))}</div></td>
-                                            <td className="font-mono text-primary font-bold">{formatNumber(job.total_bodies)}</td>
-                                            <td>
-                                                <Select value={job.status} onValueChange={(v) => handleStatusChange(job.id, v)}>
-                                                    <SelectTrigger className={`w-32 h-8 text-xs ${getStatusColor(job.status)} rounded-sm`}><SelectValue /></SelectTrigger>
-                                                    <SelectContent className="bg-card border-border rounded-sm">
-                                                        <SelectItem value="pending">Pending</SelectItem>
-                                                        <SelectItem value="in_progress">In Progress</SelectItem>
-                                                        <SelectItem value="completed">Completed</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </td>
-                                            <td className="text-muted-foreground">{job.created_by}</td>
+                                    {paginatedJobs.map((row) => (
+                                        <tr key={row._rowKey} data-testid={`job-row-${row._rowKey}`}>
+                                            <td>{formatDate(row.job_date)}</td>
+                                            <td className="font-medium">{row.job_number}</td>
+                                            <td>{row.raw_material_sr_no}</td>
+                                            <td>{row.raw_material_size}</td>
+                                            <td className="font-mono">{formatNumber(row.sheets_from_material)}</td>
+                                            <td><Badge variant="outline">{row.size_name}</Badge></td>
+                                            <td>{row.brand_name}</td>
+                                            <td className="font-mono">{formatNumber(row.bodies_count)}</td>
+                                            <td className="font-mono text-primary font-bold">{formatNumber(row.total_printing)}</td>
+                                            <td className="text-muted-foreground">{row.created_by}</td>
                                             <td>
                                                 <div className="flex gap-1">
-                                                    <Button variant="ghost" size="icon" onClick={() => openEdit(job)} className="text-muted-foreground hover:text-primary"><Pencil className="w-4 h-4" /></Button>
-                                                    <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(job.id)} className="text-muted-foreground hover:text-destructive" data-testid={`delete-job-${job.id}`}><Trash2 className="w-4 h-4" /></Button>
+                                                    <Button variant="ghost" size="icon" onClick={() => openEdit(row)} className="text-muted-foreground hover:text-primary"><Pencil className="w-4 h-4" /></Button>
+                                                    <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(row.id)} className="text-muted-foreground hover:text-destructive" data-testid={`delete-job-${row.id}`}><Trash2 className="w-4 h-4" /></Button>
                                                 </div>
                                             </td>
                                         </tr>

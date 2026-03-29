@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Badge } from '../components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { dashboardAPI } from '../lib/api';
-import { formatNumber, formatDate, getPOStatusLabel } from '../lib/utils';
+import { formatNumber, formatDate } from '../lib/utils';
 import GreetingBanner from '../components/dashboard/GreetingBanner';
 import StatCard from '../components/dashboard/StatCard';
 import {
@@ -13,12 +13,8 @@ import {
 } from 'lucide-react';
 import {
     AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-    PieChart, Pie, Cell, Legend
 } from 'recharts';
 import { toast } from 'sonner';
-
-const CHART_COLORS = ['#ea580c', '#f59e0b', '#22c55e', '#3b82f6', '#8b5cf6'];
-const PIE_COLORS = { pending: '#f59e0b', dispatched: '#3b82f6', delivered: '#22c55e' };
 
 const ACTIVITY_ICONS = {
     purchase: ShoppingCart,
@@ -41,7 +37,6 @@ const Dashboard = () => {
     const [stats, setStats] = useState(null);
     const [productionTrend, setProductionTrend] = useState([]);
     const [trendPeriod, setTrendPeriod] = useState('monthly');
-    const [dispatchDist, setDispatchDist] = useState([]);
     const [stockLevels, setStockLevels] = useState([]);
     const [recentActivity, setRecentActivity] = useState([]);
     const [poSummary, setPOSummary] = useState({ pending_count: 0, latest: [] });
@@ -66,7 +61,6 @@ const Dashboard = () => {
             const results = await Promise.allSettled([
                 dashboardAPI.getStats(),
                 dashboardAPI.getProductionTrend('monthly'),
-                dashboardAPI.getDispatchDistribution(),
                 dashboardAPI.getPurchaseStock(),
                 dashboardAPI.getRecentActivity(),
                 dashboardAPI.getPOSummary(),
@@ -74,18 +68,15 @@ const Dashboard = () => {
 
             if (results[0].status === 'fulfilled') setStats(results[0].value.data);
             if (results[1].status === 'fulfilled') setProductionTrend(results[1].value.data);
-            if (results[2].status === 'fulfilled') setDispatchDist(results[2].value.data);
-            if (results[3].status === 'fulfilled') setStockLevels(results[3].value.data);
-            if (results[4].status === 'fulfilled') setRecentActivity(results[4].value.data);
-            if (results[5].status === 'fulfilled') setPOSummary(results[5].value.data);
+            if (results[2].status === 'fulfilled') setStockLevels(results[2].value.data);
+            if (results[3].status === 'fulfilled') setRecentActivity(results[3].value.data);
+            if (results[4].status === 'fulfilled') setPOSummary(results[4].value.data);
         } catch (err) {
             toast.error('Failed to load dashboard');
         } finally {
             setLoading(false);
         }
     };
-
-    const dispatchTotal = dispatchDist.reduce((sum, d) => sum + d.count, 0);
 
     if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
 
@@ -106,8 +97,8 @@ const Dashboard = () => {
                 />
                 <StatCard
                     title="Printing Jobs"
-                    value={formatNumber(stats?.printing_coating?.pending_jobs || 0)}
-                    subtitle={`${formatNumber(stats?.printing_coating?.completed_jobs || 0)} completed`}
+                    value={formatNumber(stats?.printing_coating?.total_jobs || 0)}
+                    subtitle={`${formatNumber(stats?.printing_coating?.total_printing_stock || 0)} total printing`}
                     icon={Printer}
                     color="info"
                     trend={stats?.trends?.printing}
@@ -123,15 +114,15 @@ const Dashboard = () => {
                 <StatCard
                     title="Dispatches"
                     value={formatNumber(stats?.dispatch?.total_items || 0)}
-                    subtitle={`${formatNumber(stats?.dispatch?.pending_orders || 0)} pending`}
+                    subtitle={`${formatNumber(stats?.dispatch?.total_dispatched || 0)} qty dispatched`}
                     icon={Truck}
                     color="warning"
                     trend={stats?.trends?.dispatch}
                 />
                 <StatCard
-                    title="Pending POs"
-                    value={formatNumber(stats?.purchase_orders?.pending || 0)}
-                    subtitle={`${formatNumber(stats?.purchase_orders?.total || 0)} total orders`}
+                    title="Purchase Orders"
+                    value={formatNumber(stats?.purchase_orders?.total || 0)}
+                    subtitle={`${formatNumber(stats?.purchase_orders?.total_quantity || 0)} total qty`}
                     icon={ClipboardList}
                     color="primary"
                     trend={stats?.trends?.purchase_orders}
@@ -139,9 +130,9 @@ const Dashboard = () => {
             </div>
 
             {/* Charts Row */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 gap-6">
                 {/* Production Trend */}
-                <Card className="industrial-card lg:col-span-2" data-testid="production-trend-chart">
+                <Card className="industrial-card" data-testid="production-trend-chart">
                     <CardHeader className="flex flex-row items-center justify-between">
                         <CardTitle className="font-display text-lg font-bold tracking-tight uppercase">Production Trend</CardTitle>
                         <Tabs value={trendPeriod} onValueChange={setTrendPeriod}>
@@ -170,44 +161,6 @@ const Dashboard = () => {
                                     <Tooltip contentStyle={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '2px' }} labelStyle={{ color: '#f4f4f5' }} />
                                     <Area type="monotone" dataKey="total" stroke="#ea580c" strokeWidth={2} fill="url(#trendGradient)" name="Qty Produced" />
                                 </AreaChart>
-                            </ResponsiveContainer>
-                        )}
-                    </CardContent>
-                </Card>
-
-                {/* Dispatch Status Donut */}
-                <Card className="industrial-card" data-testid="dispatch-donut-chart">
-                    <CardHeader><CardTitle className="font-display text-lg font-bold tracking-tight uppercase">Dispatch Status</CardTitle></CardHeader>
-                    <CardContent>
-                        {dispatchDist.every(d => d.count === 0) ? (
-                            <div className="flex items-center justify-center h-48 text-muted-foreground"><AlertCircle className="w-4 h-4 mr-2" />No dispatch data</div>
-                        ) : (
-                            <ResponsiveContainer width="100%" height={280}>
-                                <PieChart>
-                                    <Pie
-                                        data={dispatchDist.filter(d => d.count > 0)}
-                                        dataKey="count"
-                                        nameKey="status"
-                                        cx="50%"
-                                        cy="50%"
-                                        innerRadius={55}
-                                        outerRadius={90}
-                                        label={({ status, count }) => `${status}: ${count}`}
-                                    >
-                                        {dispatchDist.filter(d => d.count > 0).map((entry, i) => (
-                                            <Cell key={i} fill={PIE_COLORS[entry.status] || CHART_COLORS[i % CHART_COLORS.length]} />
-                                        ))}
-                                    </Pie>
-                                    <Tooltip contentStyle={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '2px' }} />
-                                    <Legend wrapperStyle={{ fontSize: 12 }} />
-                                    {/* Center label */}
-                                    <text x="50%" y="48%" textAnchor="middle" dominantBaseline="middle" className="fill-foreground" style={{ fontSize: '24px', fontWeight: 'bold', fontFamily: 'Barlow Condensed' }}>
-                                        {dispatchTotal}
-                                    </text>
-                                    <text x="50%" y="58%" textAnchor="middle" dominantBaseline="middle" className="fill-muted-foreground" style={{ fontSize: '11px', fontWeight: 500 }}>
-                                        TOTAL
-                                    </text>
-                                </PieChart>
                             </ResponsiveContainer>
                         )}
                     </CardContent>
@@ -266,22 +219,20 @@ const Dashboard = () => {
                     </CardContent>
                 </Card>
 
-                {/* PO Alerts */}
+                {/* Recent POs */}
                 <Card className="industrial-card" data-testid="po-alerts">
                     <CardHeader className="flex flex-row items-center justify-between">
                         <CardTitle className="font-display text-lg font-bold tracking-tight uppercase flex items-center gap-2">
-                            <ClipboardList className="w-5 h-5 text-primary" /> Purchase Order Alerts
+                            <ClipboardList className="w-5 h-5 text-primary" /> Recent Purchase Orders
                         </CardTitle>
-                        {poSummary.pending_count > 0 && (
-                            <Badge variant="destructive" className="font-mono">{poSummary.pending_count} pending</Badge>
-                        )}
+                        <Badge variant="outline" className="font-mono">{poSummary.total_count || 0} total</Badge>
                     </CardHeader>
                     <CardContent>
-                        {poSummary.pending_count === 0 ? (
-                            <div className="flex items-center justify-center h-32 text-success">
+                        {(!poSummary.latest || poSummary.latest.length === 0) ? (
+                            <div className="flex items-center justify-center h-32 text-muted-foreground">
                                 <div className="text-center">
-                                    <p className="font-bold">All orders processed</p>
-                                    <p className="text-xs text-muted-foreground mt-1">No pending purchase orders</p>
+                                    <p className="font-bold">No purchase orders</p>
+                                    <p className="text-xs text-muted-foreground mt-1">Create your first purchase order</p>
                                 </div>
                             </div>
                         ) : (
@@ -299,16 +250,16 @@ const Dashboard = () => {
                                         </div>
                                         <div className="text-right">
                                             <p className="text-sm font-mono font-bold">{formatNumber(po.quantity)}</p>
-                                            <Badge variant="outline" className="text-xs">{getPOStatusLabel(po.status)}</Badge>
+                                            <p className="text-xs text-muted-foreground">{formatNumber(po.quantity_dispatched || 0)} dispatched</p>
                                         </div>
                                     </div>
                                 ))}
-                                {poSummary.pending_count > 5 && (
+                                {(poSummary.total_count || 0) > 5 && (
                                     <p
                                         className="text-xs text-primary cursor-pointer hover:underline text-center pt-2"
                                         onClick={() => navigate('/purchase-orders')}
                                     >
-                                        View all {poSummary.pending_count} pending orders
+                                        View all {poSummary.total_count} orders
                                     </p>
                                 )}
                             </div>

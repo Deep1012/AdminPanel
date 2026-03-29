@@ -11,7 +11,7 @@ import TableSearch from '../components/TableSearch';
 import TablePagination from '../components/TablePagination';
 import { useTableFilter } from '../hooks/useTableFilter';
 import { usePagination } from '../hooks/usePagination';
-import { productionAPI, brandsAPI, sizesAPI } from '../lib/api';
+import { productionAPI, brandsAPI, sizesAPI, dashboardAPI } from '../lib/api';
 import { formatDate, formatNumber } from '../lib/utils';
 import { Plus, Trash2, Pencil, Factory, Loader2, AlertCircle, Download } from 'lucide-react';
 import { toast } from 'sonner';
@@ -28,7 +28,7 @@ const PRODUCTION_EXPORT_COLUMNS = [
 ];
 
 const emptyForm = {
-    brand_id: '', size_id: '', quantity_produced: '', printing_stock_used: '', notes: '',
+    brand_id: '', size_id: '', quantity_produced: '', notes: '',
     production_date: new Date().toISOString().split('T')[0]
 };
 
@@ -36,6 +36,7 @@ const Production = () => {
     const [production, setProduction] = useState([]);
     const [brands, setBrands] = useState([]);
     const [sizes, setSizes] = useState([]);
+    const [printingStock, setPrintingStock] = useState([]);
     const [loading, setLoading] = useState(true);
     const [dialogOpen, setDialogOpen] = useState(false);
     const [submitting, setSubmitting] = useState(false);
@@ -63,10 +64,10 @@ const Production = () => {
     const fetchData = async () => {
         try {
             setLoading(true);
-            const [prodRes, brandsRes, sizesRes] = await Promise.all([
-                productionAPI.getAll(), brandsAPI.getAll(), sizesAPI.getAll()
+            const [prodRes, brandsRes, sizesRes, stockRes] = await Promise.all([
+                productionAPI.getAll(), brandsAPI.getAll(), sizesAPI.getAll(), dashboardAPI.getPrintingStockList()
             ]);
-            setProduction(prodRes.data); setBrands(brandsRes.data); setSizes(sizesRes.data);
+            setProduction(prodRes.data); setBrands(brandsRes.data); setSizes(sizesRes.data); setPrintingStock(stockRes.data);
         } catch (err) { toast.error('Failed to load data'); }
         finally { setLoading(false); }
     };
@@ -76,7 +77,7 @@ const Production = () => {
         setEditingId(entry.id);
         setFormData({
             brand_id: entry.brand_id || '', size_id: entry.size_id || '',
-            quantity_produced: String(entry.quantity_produced), printing_stock_used: String(entry.printing_stock_used || ''),
+            quantity_produced: String(entry.quantity_produced),
             notes: entry.notes || '',
             production_date: entry.production_date ? entry.production_date.split('T')[0] : new Date().toISOString().split('T')[0],
         });
@@ -85,18 +86,19 @@ const Production = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!formData.brand_id || !formData.size_id || !formData.quantity_produced || !formData.printing_stock_used) {
+        if (!formData.brand_id || !formData.size_id || !formData.quantity_produced) {
             toast.error('Please fill all required fields'); return;
         }
         setSubmitting(true);
         try {
             const brand = brands.find(b => b.id === formData.brand_id);
             const size = sizes.find(s => s.id === formData.size_id);
+            const qtyProduced = parseInt(formData.quantity_produced);
             const payload = {
                 brand_id: formData.brand_id, brand_name: brand?.name || '',
                 size_id: formData.size_id, size_name: size?.name || '',
-                quantity_produced: parseInt(formData.quantity_produced),
-                printing_stock_used: parseInt(formData.printing_stock_used),
+                quantity_produced: qtyProduced,
+                printing_stock_used: qtyProduced,
                 notes: formData.notes || null,
                 production_date: new Date(formData.production_date).toISOString(),
             };
@@ -163,16 +165,28 @@ const Production = () => {
                                 <SelectContent className="bg-card border-border rounded-sm max-h-60">{brands.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
                             </Select>
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Printing Stock Used *</Label>
-                                <Input type="number" value={formData.printing_stock_used} onChange={(e) => setFormData({ ...formData, printing_stock_used: e.target.value })} placeholder="0" className="bg-background border-input rounded-sm font-mono" data-testid="prod-printing-used" />
-                            </div>
-                            <div className="space-y-2">
-                                <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Qty Produced *</Label>
-                                <Input type="number" value={formData.quantity_produced} onChange={(e) => setFormData({ ...formData, quantity_produced: e.target.value })} placeholder="0" className="bg-background border-input rounded-sm font-mono" data-testid="prod-quantity" />
-                            </div>
+                        <div className="space-y-2">
+                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Qty Produced *</Label>
+                            <Input type="number" value={formData.quantity_produced} onChange={(e) => setFormData({ ...formData, quantity_produced: e.target.value })} placeholder="0" className="bg-background border-input rounded-sm font-mono" data-testid="prod-quantity" />
+                            {formData.quantity_produced && (
+                                <p className="text-xs text-muted-foreground">Printing stock used will be set to <span className="font-mono font-bold text-primary">{formatNumber(parseInt(formData.quantity_produced) || 0)}</span></p>
+                            )}
                         </div>
+                        {formData.size_id && formData.brand_id && (() => {
+                            const size = sizes.find(s => s.id === formData.size_id);
+                            const brand = brands.find(b => b.id === formData.brand_id);
+                            const stock = printingStock.find(s => s.size_name === size?.name && s.brand_name === brand?.name);
+                            return stock ? (
+                                <div className="p-3 bg-primary/10 rounded-sm border border-primary/20 text-sm">
+                                    <p className="text-xs font-bold uppercase text-muted-foreground mb-1">Available Printing Stock</p>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        <div><p className="text-xs text-muted-foreground">Printed</p><p className="font-mono font-bold">{formatNumber(stock.printing_done)}</p></div>
+                                        <div><p className="text-xs text-muted-foreground">Used</p><p className="font-mono">{formatNumber(stock.used_in_production)}</p></div>
+                                        <div><p className="text-xs text-muted-foreground">Available</p><p className="font-mono font-bold text-primary">{formatNumber(stock.available)}</p></div>
+                                    </div>
+                                </div>
+                            ) : null;
+                        })()}
                         <div className="space-y-2">
                             <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Notes</Label>
                             <Textarea value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} placeholder="Optional notes..." className="bg-background border-input rounded-sm" data-testid="prod-notes" />

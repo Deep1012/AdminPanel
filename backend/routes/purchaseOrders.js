@@ -61,8 +61,8 @@ router.post("/", authenticate, async (req, res) => {
       size_id,
       size_name,
       quantity: parseInt(quantity),
-      status: "received",
       notes: notes || null,
+      quantity_dispatched: 0,
       dispatch_id: null,
       created_by: req.user.username,
       created_at: now,
@@ -80,7 +80,7 @@ router.post("/", authenticate, async (req, res) => {
 // PUT update purchase order
 router.put("/:poId", authenticate, async (req, res) => {
   try {
-    const { status, notes, date, company_name, brand_id, brand_name, size_id, size_name, quantity } = req.body;
+    const { notes, date, company_name, brand_id, brand_name, size_id, size_name, quantity } = req.body;
 
     const existingPO = await PurchaseOrder.findOne({ id: req.params.poId }).lean();
     if (!existingPO) {
@@ -96,38 +96,7 @@ router.put("/:poId", authenticate, async (req, res) => {
     if (size_name !== undefined) updateData.size_name = size_name;
     if (quantity !== undefined) updateData.quantity = parseInt(quantity);
     if (notes !== undefined) updateData.notes = notes;
-
-    // Handle status change to "dispatched" -> auto-create Dispatch entry
-    if (status !== undefined && status !== existingPO.status) {
-      if (status === "dispatched" && !existingPO.dispatch_id) {
-        try {
-          const dispatchId = uuidv4();
-          const now = new Date().toISOString();
-          const poData = { ...existingPO, ...updateData };
-
-          await Dispatch.create({
-            id: dispatchId,
-            order_number: `DSP-${existingPO.serial_no}`,
-            customer_name: poData.company_name,
-            brand_id: poData.brand_id,
-            brand_name: poData.brand_name,
-            size_id: poData.size_id,
-            size_name: poData.size_name,
-            quantity: poData.quantity,
-            status: "dispatched",
-            delivery_address: null,
-            notes: `Auto-created from PO ${existingPO.serial_no}`,
-            dispatch_date: now,
-            created_by: req.user.username,
-          });
-
-          updateData.dispatch_id = dispatchId;
-        } catch (dispatchErr) {
-          console.error("Failed to auto-create dispatch:", dispatchErr.message);
-        }
-      }
-      updateData.status = status;
-    }
+    if (req.body.quantity_dispatched !== undefined) updateData.quantity_dispatched = req.body.quantity_dispatched;
 
     if (Object.keys(updateData).length === 0) {
       return res.status(400).json({ detail: "No fields to update" });

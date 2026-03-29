@@ -6,14 +6,14 @@ import { Label } from '../components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Badge } from '../components/ui/badge';
-import { Textarea } from '../components/ui/textarea';
 import ConfirmDialog from '../components/ConfirmDialog';
 import TableSearch from '../components/TableSearch';
 import TablePagination from '../components/TablePagination';
 import { useTableFilter } from '../hooks/useTableFilter';
 import { usePagination } from '../hooks/usePagination';
-import { dispatchAPI, brandsAPI, sizesAPI } from '../lib/api';
-import { formatDate, formatNumber, getStatusColor } from '../lib/utils';
+import { dispatchAPI, brandsAPI, sizesAPI, customersAPI } from '../lib/api';
+import SearchableSelect from '../components/SearchableSelect';
+import { formatDate, formatNumber } from '../lib/utils';
 import { Plus, Trash2, Pencil, Truck, Loader2, AlertCircle, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { exportToExcel } from '../lib/exportToExcel';
@@ -25,19 +25,19 @@ const DISPATCH_EXPORT_COLUMNS = [
     { header: 'Brand', key: 'brand_name' },
     { header: 'Size', key: 'size_name' },
     { header: 'Quantity', key: 'quantity' },
-    { header: 'Status', key: 'status' },
     { header: 'Created By', key: 'created_by' },
 ];
 
 const emptyForm = {
-    order_number: '', customer_name: '', brand_id: '', size_id: '', quantity: '',
-    delivery_address: '', notes: '', dispatch_date: new Date().toISOString().split('T')[0]
+    customer_name: '', brand_id: '', size_id: '', quantity: '',
+    notes: '', dispatch_date: new Date().toISOString().split('T')[0]
 };
 
 const Dispatch = () => {
     const [dispatches, setDispatches] = useState([]);
     const [brands, setBrands] = useState([]);
     const [sizes, setSizes] = useState([]);
+    const [customers, setCustomers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [dialogOpen, setDialogOpen] = useState(false);
     const [submitting, setSubmitting] = useState(false);
@@ -46,15 +46,13 @@ const Dispatch = () => {
     const [deleteTarget, setDeleteTarget] = useState(null);
 
     const [searchTerm, setSearchTerm] = useState('');
-    const [filterStatus, setFilterStatus] = useState('');
     const [dateFrom, setDateFrom] = useState('');
     const [dateTo, setDateTo] = useState('');
 
     const filters = useMemo(() => [
-        ...(filterStatus ? [{ key: 'status', value: filterStatus, type: 'exact' }] : []),
         ...(dateFrom ? [{ key: 'dispatch_date', value: dateFrom, type: 'dateFrom' }] : []),
         ...(dateTo ? [{ key: 'dispatch_date', value: dateTo, type: 'dateTo' }] : []),
-    ], [filterStatus, dateFrom, dateTo]);
+    ], [dateFrom, dateTo]);
 
     const filteredDispatches = useTableFilter({
         data: dispatches, searchTerm, searchFields: ['order_number', 'customer_name'], filters
@@ -67,10 +65,10 @@ const Dispatch = () => {
     const fetchData = async () => {
         try {
             setLoading(true);
-            const [dispatchRes, brandsRes, sizesRes] = await Promise.all([
-                dispatchAPI.getAll(), brandsAPI.getAll(), sizesAPI.getAll()
+            const [dispatchRes, brandsRes, sizesRes, customersRes] = await Promise.all([
+                dispatchAPI.getAll(), brandsAPI.getAll(), sizesAPI.getAll(), customersAPI.getAll()
             ]);
-            setDispatches(dispatchRes.data); setBrands(brandsRes.data); setSizes(sizesRes.data);
+            setDispatches(dispatchRes.data); setBrands(brandsRes.data); setSizes(sizesRes.data); setCustomers(customersRes.data);
         } catch (err) { toast.error('Failed to load data'); }
         finally { setLoading(false); }
     };
@@ -79,9 +77,9 @@ const Dispatch = () => {
     const openEdit = (d) => {
         setEditingId(d.id);
         setFormData({
-            order_number: d.order_number || '', customer_name: d.customer_name || '',
+            customer_name: d.customer_name || '',
             brand_id: d.brand_id || '', size_id: d.size_id || '',
-            quantity: String(d.quantity), delivery_address: d.delivery_address || '',
+            quantity: String(d.quantity),
             notes: d.notes || '',
             dispatch_date: d.dispatch_date ? d.dispatch_date.split('T')[0] : new Date().toISOString().split('T')[0],
         });
@@ -90,7 +88,7 @@ const Dispatch = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!formData.order_number || !formData.customer_name || !formData.brand_id || !formData.size_id || !formData.quantity) {
+        if (!formData.customer_name || !formData.brand_id || !formData.size_id || !formData.quantity) {
             toast.error('Please fill all required fields'); return;
         }
         setSubmitting(true);
@@ -98,11 +96,11 @@ const Dispatch = () => {
             const brand = brands.find(b => b.id === formData.brand_id);
             const size = sizes.find(s => s.id === formData.size_id);
             const payload = {
-                order_number: formData.order_number, customer_name: formData.customer_name,
+                customer_name: formData.customer_name,
                 brand_id: formData.brand_id, brand_name: brand?.name || '',
                 size_id: formData.size_id, size_name: size?.name || '',
                 quantity: parseInt(formData.quantity),
-                delivery_address: formData.delivery_address || null, notes: formData.notes || null,
+                notes: formData.notes || null,
                 dispatch_date: new Date(formData.dispatch_date).toISOString(),
             };
             if (editingId) { await dispatchAPI.update(editingId, payload); toast.success('Dispatch updated'); }
@@ -112,11 +110,6 @@ const Dispatch = () => {
         finally { setSubmitting(false); }
     };
 
-    const handleStatusChange = async (dispatchId, newStatus) => {
-        try { await dispatchAPI.update(dispatchId, { status: newStatus }); toast.success('Status updated'); fetchData(); }
-        catch (err) { toast.error('Failed to update status'); }
-    };
-
     const handleDelete = async () => {
         if (!deleteTarget) return;
         try { await dispatchAPI.delete(deleteTarget); toast.success('Dispatch deleted'); fetchData(); }
@@ -124,10 +117,9 @@ const Dispatch = () => {
         finally { setDeleteTarget(null); }
     };
 
-    const clearFilters = () => { setSearchTerm(''); setFilterStatus(''); setDateFrom(''); setDateTo(''); };
+    const clearFilters = () => { setSearchTerm(''); setDateFrom(''); setDateTo(''); };
 
     const totalQuantity = dispatches.reduce((sum, d) => sum + (d.quantity || 0), 0);
-    const pendingOrders = dispatches.filter(d => d.status === 'pending').length;
 
     return (
         <div className="space-y-6 animate-fade-in" data-testid="dispatch-page">
@@ -159,15 +151,16 @@ const Dispatch = () => {
                             <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Date *</Label>
                             <Input type="date" value={formData.dispatch_date} onChange={(e) => setFormData({ ...formData, dispatch_date: e.target.value })} className="bg-background border-input rounded-sm font-mono" data-testid="dispatch-date" />
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Order Number *</Label>
-                                <Input value={formData.order_number} onChange={(e) => setFormData({ ...formData, order_number: e.target.value })} placeholder="ORD-001" className="bg-background border-input rounded-sm font-mono" data-testid="dispatch-order" />
-                            </div>
-                            <div className="space-y-2">
-                                <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Customer *</Label>
-                                <Input value={formData.customer_name} onChange={(e) => setFormData({ ...formData, customer_name: e.target.value })} placeholder="Customer name" className="bg-background border-input rounded-sm" data-testid="dispatch-customer" />
-                            </div>
+                        <div className="space-y-2">
+                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Customer *</Label>
+                            <SearchableSelect
+                                options={customers.map(c => ({ value: c.name, label: c.name }))}
+                                value={formData.customer_name}
+                                onValueChange={(v) => setFormData({ ...formData, customer_name: v })}
+                                placeholder="Select customer"
+                                searchPlaceholder="Search customers..."
+                                data-testid="dispatch-customer"
+                            />
                         </div>
                         <div className="space-y-2">
                             <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Brand *</Label>
@@ -190,10 +183,6 @@ const Dispatch = () => {
                             </div>
                         </div>
                         <div className="space-y-2">
-                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Delivery Address</Label>
-                            <Textarea value={formData.delivery_address} onChange={(e) => setFormData({ ...formData, delivery_address: e.target.value })} placeholder="Enter delivery address..." className="bg-background border-input rounded-sm" data-testid="dispatch-address" />
-                        </div>
-                        <div className="space-y-2">
                             <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Notes</Label>
                             <Input value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} placeholder="Optional notes..." className="bg-background border-input rounded-sm" data-testid="dispatch-notes" />
                         </div>
@@ -206,9 +195,8 @@ const Dispatch = () => {
 
             <ConfirmDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)} title="Delete Dispatch Order?" description="This will permanently remove this dispatch order." onConfirm={handleDelete} />
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Card className="industrial-card"><CardContent className="p-4"><div className="flex items-center gap-3"><div className="p-2 bg-primary/10 rounded-sm border border-primary/20"><Truck className="w-5 h-5 text-primary" /></div><div><p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Total Orders</p><p className="font-display text-2xl font-bold">{dispatches.length}</p></div></div></CardContent></Card>
-                <Card className="industrial-card"><CardContent className="p-4"><div className="flex items-center gap-3"><div className="p-2 bg-warning/10 rounded-sm border border-warning/20"><Truck className="w-5 h-5 text-warning" /></div><div><p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Pending</p><p className="font-display text-2xl font-bold">{pendingOrders}</p></div></div></CardContent></Card>
                 <Card className="industrial-card"><CardContent className="p-4"><div className="flex items-center gap-3"><div className="p-2 bg-success/10 rounded-sm border border-success/20"><Truck className="w-5 h-5 text-success" /></div><div><p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Total Quantity</p><p className="font-display text-2xl font-bold">{formatNumber(totalQuantity)}</p></div></div></CardContent></Card>
             </div>
 
@@ -219,9 +207,6 @@ const Dispatch = () => {
                     onSearchChange={setSearchTerm}
                     searchPlaceholder="Search by order #, customer..."
                     filters={[
-                        { key: 'status', label: 'Status', type: 'select', options: [
-                            { value: 'pending', label: 'Pending' }, { value: 'dispatched', label: 'Dispatched' }, { value: 'delivered', label: 'Delivered' }
-                        ], value: filterStatus, onChange: setFilterStatus },
                         { key: 'dateFrom', label: 'From Date', type: 'date', value: dateFrom, onChange: setDateFrom },
                         { key: 'dateTo', label: 'To Date', type: 'date', value: dateTo, onChange: setDateTo },
                     ]}
@@ -237,7 +222,7 @@ const Dispatch = () => {
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="data-table" data-testid="dispatch-table">
-                                <thead><tr><th>Date</th><th>Order #</th><th>Customer</th><th>Brand</th><th>Size</th><th>Qty</th><th>Status</th><th>By</th><th></th></tr></thead>
+                                <thead><tr><th>Date</th><th>Order #</th><th>Customer</th><th>Brand</th><th>Size</th><th>Qty</th><th>By</th><th></th></tr></thead>
                                 <tbody>
                                     {paginatedDispatches.map((d) => (
                                         <tr key={d.id} data-testid={`dispatch-row-${d.id}`}>
@@ -247,16 +232,6 @@ const Dispatch = () => {
                                             <td>{d.brand_name}</td>
                                             <td><Badge variant="outline">{d.size_name}</Badge></td>
                                             <td className="font-mono">{formatNumber(d.quantity)}</td>
-                                            <td>
-                                                <Select value={d.status} onValueChange={(v) => handleStatusChange(d.id, v)}>
-                                                    <SelectTrigger className={`w-32 h-8 text-xs ${getStatusColor(d.status)} rounded-sm`}><SelectValue /></SelectTrigger>
-                                                    <SelectContent className="bg-card border-border rounded-sm">
-                                                        <SelectItem value="pending">Pending</SelectItem>
-                                                        <SelectItem value="dispatched">Dispatched</SelectItem>
-                                                        <SelectItem value="delivered">Delivered</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </td>
                                             <td className="text-muted-foreground">{d.created_by}</td>
                                             <td>
                                                 <div className="flex gap-1">

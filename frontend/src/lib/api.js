@@ -88,6 +88,13 @@ export const purchaseOrdersAPI = {
     delete: (id) => api.delete(`/purchase-orders/${id}`),
 };
 
+export const customersAPI = {
+    getAll: () => api.get('/customers'),
+    create: (data) => api.post('/customers', data),
+    update: (id, data) => api.put(`/customers/${id}`, data),
+    delete: (id) => api.delete(`/customers/${id}`),
+};
+
 export const dashboardAPI = {
     getStats: () => api.get('/dashboard/stats'),
     getPurchaseStock: () => api.get('/dashboard/purchase-stock'),

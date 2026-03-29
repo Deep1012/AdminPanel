@@ -5,11 +5,27 @@ const { authenticate } = require("../middleware/auth");
 
 const router = express.Router();
 
+// Generate sequential SR No: RM-001, RM-002, etc.
+async function generateSrNo() {
+  const last = await Purchase.findOne({}, { sr_no: 1 })
+    .sort({ sr_no: -1 })
+    .lean();
+
+  let seq = 1;
+  if (last && last.sr_no) {
+    const match = last.sr_no.match(/RM-(\d+)/);
+    if (match) seq = parseInt(match[1], 10) + 1;
+  }
+
+  return `RM-${String(seq).padStart(3, "0")}`;
+}
+
 router.post("/", authenticate, async (req, res) => {
   try {
-    const { sr_no, gauge, size1, size2, temper, weight, supplier, invoice_number, purchase_date } = req.body;
+    const { gauge, size1, size2, temper, weight, supplier, invoice_number, purchase_date } = req.body;
     const id = uuidv4();
     const now = purchase_date || new Date().toISOString();
+    const sr_no = await generateSrNo();
 
     // Calculate No of Sheets: WEIGHT / (GAUGE * SIZE1 * SIZE2 / 100000 * 0.785)
     const divisor = (gauge * size1 * size2 / 100000) * 0.785;

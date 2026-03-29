@@ -6,9 +6,22 @@ const { authenticate } = require("../middleware/auth");
 
 const router = express.Router();
 
+// Auto-generate job number: JOB-001, JOB-002, etc.
+async function generateJobNumber() {
+  const last = await PrintingJob.findOne({}, { job_number: 1 })
+    .sort({ job_number: -1 })
+    .lean();
+  let seq = 1;
+  if (last && last.job_number) {
+    const match = last.job_number.match(/JOB-(\d+)/);
+    if (match) seq = parseInt(match[1], 10) + 1;
+  }
+  return `JOB-${String(seq).padStart(3, "0")}`;
+}
+
 router.post("/", authenticate, async (req, res) => {
   try {
-    const { job_number, raw_material_id, sizes, notes, job_date } = req.body;
+    const { raw_material_id, sizes, notes, job_date } = req.body;
     const id = uuidv4();
     const now = job_date || new Date().toISOString();
 
@@ -29,6 +42,8 @@ router.post("/", authenticate, async (req, res) => {
       }
     }
 
+    const job_number = await generateJobNumber();
+
     const job = await PrintingJob.create({
       id,
       job_number,
@@ -38,7 +53,6 @@ router.post("/", authenticate, async (req, res) => {
       sheets_from_material: sheets_available,
       sizes,
       total_bodies,
-      status: "pending",
       notes: notes || null,
       job_date: now,
       created_by: req.user.username,
@@ -82,9 +96,8 @@ router.get("/", authenticate, async (req, res) => {
 
 router.put("/:jobId", authenticate, async (req, res) => {
   try {
-    const { status, notes } = req.body;
+    const { notes } = req.body;
     const updateData = {};
-    if (status !== undefined) updateData.status = status;
     if (notes !== undefined) updateData.notes = notes;
 
     if (Object.keys(updateData).length === 0) {

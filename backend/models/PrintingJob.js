@@ -9,7 +9,8 @@ const printingJobSchema = new mongoose.Schema({
   sheets_from_material: { type: Number, default: 0 },
   sizes: { type: Array, default: [] },
   total_bodies: { type: Number, default: 0 },
-  status: { type: String, default: "pending", enum: ["pending", "in_progress", "completed"] },
+  // status field deprecated — kept for backward compat with existing data
+  status: { type: String, default: null },
   notes: { type: String, default: null },
   job_date: { type: String, required: true },
   created_by: { type: String, required: true },

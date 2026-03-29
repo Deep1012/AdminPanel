@@ -1,0 +1,135 @@
+{
+  "identity": {
+    "name": "E1: The Performance Pro",
+    "description": "A precision-obsessed industrial designer who values data density, high contrast, and rapid readability over decoration. The aesthetic is 'Tactical Factory'—dark surfaces, safety orange accents, and monospaced data fields.",
+    "principles": [
+      "Density is Information: Maximize the screen real estate with useful data, but keep it legible.",
+      "Contrast is Safety: Use high-contrast colors (Safety Orange, Signal Green) to denote status instantly.",
+      "The Grid is God: Everything aligns perfectly. Visible grid lines are a feature, not a bug.",
+      "No Fluff: If it doesn't help the factory manager make a decision, kill it."
+    ]
+  },
+  "typography": {
+    "primary_font": "Barlow Condensed",
+    "secondary_font": "IBM Plex Sans",
+    "mono_font": "JetBrains Mono",
+    "scale": {
+      "h1": "text-4xl font-bold tracking-tight uppercase",
+      "h2": "text-3xl font-semibold tracking-tight uppercase",
+      "h3": "text-2xl font-semibold tracking-tight",
+      "body": "text-base font-normal leading-relaxed",
+      "small": "text-sm font-medium tracking-wide",
+      "label": "text-xs font-bold uppercase tracking-widest text-muted-foreground"
+    },
+    "imports": [
+      "https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+    ]
+  },
+  "colors": {
+    "theme": "dark",
+    "palette": {
+      "background": "#09090b",
+      "foreground": "#fafafa",
+      "card": "#18181b",
+      "card_foreground": "#fafafa",
+      "popover": "#09090b",
+      "popover_foreground": "#fafafa",
+      "primary": "#ea580c",
+      "primary_foreground": "#fafafa",
+      "secondary": "#27272a",
+      "secondary_foreground": "#fafafa",
+      "muted": "#27272a",
+      "muted_foreground": "#a1a1aa",
+      "accent": "#27272a",
+      "accent_foreground": "#fafafa",
+      "destructive": "#ef4444",
+      "destructive_foreground": "#fafafa",
+      "border": "#27272a",
+      "input": "#27272a",
+      "ring": "#ea580c"
+    },
+    "chart_colors": {
+      "chart_1": "#ea580c",
+      "chart_2": "#22c55e",
+      "chart_3": "#0ea5e9",
+      "chart_4": "#eab308",
+      "chart_5": "#8b5cf6"
+    },
+    "custom_tokens": {
+      "success": "#22c55e",
+      "warning": "#eab308",
+      "danger": "#ef4444",
+      "info": "#3b82f6"
+    }
+  },
+  "layout": {
+    "grid_system": "Bento Grid (High Density)",
+    "container_padding": "p-4 md:p-6 lg:p-8",
+    "spacing_scale": "conservative (dense)",
+    "strategies": [
+      "Mode B: High Density Grid for Dashboards (gap-4)",
+      "Grid Borders: Visible 1px borders (#27272a) between dashboard widgets",
+      "Sidebar Navigation: Fixed left sidebar for quick access to modules"
+    ]
+  },
+  "components": {
+    "radius": "rounded-sm",
+    "border_width": "border",
+    "shadows": "none",
+    "style_overrides": {
+      "Card": "bg-card border-border rounded-sm shadow-none",
+      "Button": "font-bold uppercase tracking-wider rounded-sm",
+      "Input": "bg-background border-input rounded-sm font-mono focus:ring-1 focus:ring-primary",
+      "Table": "border-collapse border border-border text-sm font-mono"
+    }
+  },
+  "visual_enhancers": {
+    "textures": [
+      "Subtle noise overlay (opacity 0.03) on background",
+      "Scanlines on 'Terminal' style widgets (optional)"
+    ],
+    "decorations": [
+      "Hazard stripes (CSS gradient) for warning zones",
+      "Glowing status indicators (box-shadow)"
+    ]
+  },
+  "image_urls": {
+    "login_background": "https://images.unsplash.com/photo-1673095025656-233e3973075b?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzR8MHwxfHNlYXJjaHw0fHxpbmR1c3RyaWFsJTIwcGFpbnQlMjBmYWN0b3J5JTIwaW50ZXJpb3IlMjBkYXJrJTIwbW9kZXxlbnwwfHx8fDE3NzM4MjM3ODJ8MA&ixlib=rb-4.1.0&q=85",
+    "hero_factory": "https://images.unsplash.com/photo-1720036236697-018370867320?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzR8MHwxfHNlYXJjaHwxfHxpbmR1c3RyaWFsJTIwcGFpbnQlMjBmYWN0b3J5JTIwaW50ZXJpb3IlMjBkYXJrJTIwbW9kZXxlbnwwfHx8fDE3NzM4MjM3ODJ8MA&ixlib=rb-4.1.0&q=85",
+    "warehouse_shelves": "https://images.unsplash.com/photo-1631856954913-c751a44490ec?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzF8MHwxfHNlYXJjaHwyfHxwYWludCUyMGNhbnMlMjB3YXJlaG91c2UlMjBzaGVsdmVzfGVufDB8fHx8MTc3MzgyMzc4M3ww&ixlib=rb-4.1.0&q=85",
+    "paint_cans": "https://images.unsplash.com/photo-1601598704991-eef6114775e0?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzF8MHwxfHNlYXJjaHwxfHxwYWludCUyMGNhbnMlMjB3YXJlaG91c2UlMjBzaGVsdmVzfGVufDB8fHx8MTc3MzgyMzc4M3ww&ixlib=rb-4.1.0&q=85"
+  },
+  "motion": {
+    "enabled": true,
+    "speed": "fast (0.15s)",
+    "type": "ease-out",
+    "interactions": [
+      "Hover: brightness-110 for buttons",
+      "Table Row Hover: bg-muted/50",
+      "Toast: Slide in from bottom-right"
+    ]
+  },
+  "accessibility": {
+    "contrast_ratio": "WCAG AA (4.5:1 minimum)",
+    "focus_states": "Visible ring-2 ring-primary offset-2 offset-background",
+    "aria_labels": "Mandatory for all icon-only buttons"
+  },
+  "instructions_to_main_agent": [
+    "INSTALL FONTS: Add the Google Fonts link to the head of index.html immediately.",
+    "TAILWIND CONFIG: Update tailwind.config.js to use the 'Barlow Condensed' and 'IBM Plex Sans' fonts.",
+    "THEME: Force 'dark' class on the html/body tag. This is an industrial tool, dark mode is default.",
+    "LAYOUT: Use a persistent Sidebar Layout (Left) and Topbar (Header).",
+    "TABLES: Build a reusable 'DataTable' component using shadcn/ui table, but styled with dense padding and visible borders.",
+    "FORMS: Use 'react-hook-form' with zod validation. Inputs should be rounded-sm and use the secondary background color.",
+    "CHARTS: Use 'recharts' for the dashboard. Ensure tooltips are dark and legible.",
+    "AUTH: Create a clean, centered Login card over the 'login_background' image with a heavy dark overlay.",
+    "ROUTING: Use 'react-router-dom'. Define routes: /login, /dashboard, /purchase, /printing, /production, /dispatch, /admin."
+  ],
+  "universal_guidelines": [
+    "Do not use gradients for backgrounds. Use solid dark greys.",
+    "Use uppercase labels for table headers and form labels (text-xs font-bold tracking-widest).",
+    "Input fields must have a clear border.",
+    "Buttons should be 'Safety Orange' (primary) or 'Ghost' (secondary).",
+    "All interactive elements must have data-testid attributes."
+  ]
+}

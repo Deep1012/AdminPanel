@@ -9,8 +9,6 @@ const dispatchSchema = new mongoose.Schema({
   size_id: { type: String, required: true },
   size_name: { type: String, required: true },
   quantity: { type: Number, required: true },
-  status: { type: String, default: "pending", enum: ["pending", "dispatched", "delivered"] },
-  delivery_address: { type: String, default: null },
   notes: { type: String, default: null },
   dispatch_date: { type: String, required: true },
   created_by: { type: String, required: true },

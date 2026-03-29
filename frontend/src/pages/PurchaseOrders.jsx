@@ -12,9 +12,10 @@ import TableSearch from '../components/TableSearch';
 import TablePagination from '../components/TablePagination';
 import { useTableFilter } from '../hooks/useTableFilter';
 import { usePagination } from '../hooks/usePagination';
-import { purchaseOrdersAPI, brandsAPI, sizesAPI } from '../lib/api';
-import { formatDate, formatNumber, getStatusColor, getPOStatusLabel } from '../lib/utils';
-import { Plus, Trash2, Pencil, ClipboardList, Loader2, AlertCircle, Truck, Factory, CheckCircle, Download } from 'lucide-react';
+import { purchaseOrdersAPI, brandsAPI, sizesAPI, customersAPI } from '../lib/api';
+import SearchableSelect from '../components/SearchableSelect';
+import { formatDate, formatNumber } from '../lib/utils';
+import { Plus, Trash2, Pencil, ClipboardList, Loader2, AlertCircle, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { exportToExcel } from '../lib/exportToExcel';
 
@@ -25,18 +26,8 @@ const PO_EXPORT_COLUMNS = [
     { header: 'Brand', key: 'brand_name' },
     { header: 'Size', key: 'size_name' },
     { header: 'Quantity', key: 'quantity' },
-    { header: 'Status', key: 'status', transform: (v) => getPOStatusLabel(v) },
-    { header: 'Dispatch', key: 'dispatch_id', transform: (v) => v ? 'Linked' : '-' },
+    { header: 'Dispatched', key: 'quantity_dispatched' },
     { header: 'Created By', key: 'created_by' },
-];
-
-const PO_STATUSES = [
-    { value: 'received', label: 'Received' },
-    { value: 'confirmed', label: 'Confirmed' },
-    { value: 'in_production', label: 'In Production' },
-    { value: 'ready', label: 'Ready' },
-    { value: 'dispatched', label: 'Dispatched' },
-    { value: 'delivered', label: 'Delivered' },
 ];
 
 const emptyForm = {
@@ -48,6 +39,7 @@ const PurchaseOrders = () => {
     const [orders, setOrders] = useState([]);
     const [brands, setBrands] = useState([]);
     const [sizes, setSizes] = useState([]);
+    const [customers, setCustomers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [dialogOpen, setDialogOpen] = useState(false);
     const [submitting, setSubmitting] = useState(false);
@@ -56,15 +48,13 @@ const PurchaseOrders = () => {
     const [deleteTarget, setDeleteTarget] = useState(null);
 
     const [searchTerm, setSearchTerm] = useState('');
-    const [filterStatus, setFilterStatus] = useState('');
     const [dateFrom, setDateFrom] = useState('');
     const [dateTo, setDateTo] = useState('');
 
     const filters = useMemo(() => [
-        ...(filterStatus ? [{ key: 'status', value: filterStatus, type: 'exact' }] : []),
         ...(dateFrom ? [{ key: 'date', value: dateFrom, type: 'dateFrom' }] : []),
         ...(dateTo ? [{ key: 'date', value: dateTo, type: 'dateTo' }] : []),
-    ], [filterStatus, dateFrom, dateTo]);
+    ], [dateFrom, dateTo]);
 
     const filteredOrders = useTableFilter({
         data: orders, searchTerm, searchFields: ['serial_no', 'company_name'], filters
@@ -77,10 +67,10 @@ const PurchaseOrders = () => {
     const fetchData = async () => {
         try {
             setLoading(true);
-            const [ordersRes, brandsRes, sizesRes] = await Promise.all([
-                purchaseOrdersAPI.getAll(), brandsAPI.getAll(), sizesAPI.getAll()
+            const [ordersRes, brandsRes, sizesRes, customersRes] = await Promise.all([
+                purchaseOrdersAPI.getAll(), brandsAPI.getAll(), sizesAPI.getAll(), customersAPI.getAll()
             ]);
-            setOrders(ordersRes.data); setBrands(brandsRes.data); setSizes(sizesRes.data);
+            setOrders(ordersRes.data); setBrands(brandsRes.data); setSizes(sizesRes.data); setCustomers(customersRes.data);
         } catch (err) { toast.error('Failed to load data'); }
         finally { setLoading(false); }
     };
@@ -120,20 +110,6 @@ const PurchaseOrders = () => {
         finally { setSubmitting(false); }
     };
 
-    const handleStatusChange = async (poId, newStatus) => {
-        if (newStatus === 'dispatched') {
-            const po = orders.find(o => o.id === poId);
-            if (po && !po.dispatch_id) {
-                toast.info('A dispatch entry will be auto-created for this order');
-            }
-        }
-        try {
-            await purchaseOrdersAPI.update(poId, { status: newStatus });
-            toast.success(`Status updated to ${getPOStatusLabel(newStatus)}`);
-            fetchData();
-        } catch (err) { toast.error('Failed to update status'); }
-    };
-
     const handleDelete = async () => {
         if (!deleteTarget) return;
         try { await purchaseOrdersAPI.delete(deleteTarget); toast.success('Order deleted'); fetchData(); }
@@ -141,12 +117,10 @@ const PurchaseOrders = () => {
         finally { setDeleteTarget(null); }
     };
 
-    const clearFilters = () => { setSearchTerm(''); setFilterStatus(''); setDateFrom(''); setDateTo(''); };
+    const clearFilters = () => { setSearchTerm(''); setDateFrom(''); setDateTo(''); };
 
     const totalOrders = orders.length;
-    const pendingCount = orders.filter(o => ['received', 'confirmed'].includes(o.status)).length;
-    const inProductionCount = orders.filter(o => o.status === 'in_production').length;
-    const readyCount = orders.filter(o => o.status === 'ready').length;
+    const totalQuantity = orders.reduce((sum, o) => sum + (o.quantity || 0), 0);
 
     return (
         <div className="space-y-6 animate-fade-in" data-testid="purchase-orders-page">
@@ -179,8 +153,15 @@ const PurchaseOrders = () => {
                             <Input type="date" value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })} className="bg-background border-input rounded-sm font-mono" data-testid="po-date" />
                         </div>
                         <div className="space-y-2">
-                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Company Name *</Label>
-                            <Input value={formData.company_name} onChange={(e) => setFormData({ ...formData, company_name: e.target.value })} placeholder="Customer company" className="bg-background border-input rounded-sm" data-testid="po-company" />
+                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Customer *</Label>
+                            <SearchableSelect
+                                options={customers.map(c => ({ value: c.name, label: c.name }))}
+                                value={formData.company_name}
+                                onValueChange={(v) => setFormData({ ...formData, company_name: v })}
+                                placeholder="Select customer"
+                                searchPlaceholder="Search customers..."
+                                data-testid="po-company"
+                            />
                         </div>
                         <div className="space-y-2">
                             <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Brand *</Label>
@@ -215,11 +196,9 @@ const PurchaseOrders = () => {
 
             <ConfirmDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)} title="Delete Purchase Order?" description="This will permanently remove this purchase order." onConfirm={handleDelete} />
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Card className="industrial-card"><CardContent className="p-4"><div className="flex items-center gap-3"><div className="p-2 bg-primary/10 rounded-sm border border-primary/20"><ClipboardList className="w-5 h-5 text-primary" /></div><div><p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Total Orders</p><p className="font-display text-2xl font-bold">{totalOrders}</p></div></div></CardContent></Card>
-                <Card className="industrial-card"><CardContent className="p-4"><div className="flex items-center gap-3"><div className="p-2 bg-warning/10 rounded-sm border border-warning/20"><ClipboardList className="w-5 h-5 text-warning" /></div><div><p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Pending</p><p className="font-display text-2xl font-bold">{pendingCount}</p></div></div></CardContent></Card>
-                <Card className="industrial-card"><CardContent className="p-4"><div className="flex items-center gap-3"><div className="p-2 bg-info/10 rounded-sm border border-info/20"><Factory className="w-5 h-5 text-info" /></div><div><p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">In Production</p><p className="font-display text-2xl font-bold">{inProductionCount}</p></div></div></CardContent></Card>
-                <Card className="industrial-card"><CardContent className="p-4"><div className="flex items-center gap-3"><div className="p-2 bg-success/10 rounded-sm border border-success/20"><CheckCircle className="w-5 h-5 text-success" /></div><div><p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Ready</p><p className="font-display text-2xl font-bold">{readyCount}</p></div></div></CardContent></Card>
+                <Card className="industrial-card"><CardContent className="p-4"><div className="flex items-center gap-3"><div className="p-2 bg-success/10 rounded-sm border border-success/20"><ClipboardList className="w-5 h-5 text-success" /></div><div><p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Total Quantity</p><p className="font-display text-2xl font-bold">{formatNumber(totalQuantity)}</p></div></div></CardContent></Card>
             </div>
 
             <Card className="industrial-card">
@@ -229,7 +208,6 @@ const PurchaseOrders = () => {
                     onSearchChange={setSearchTerm}
                     searchPlaceholder="Search by serial no, company..."
                     filters={[
-                        { key: 'status', label: 'Status', type: 'select', options: PO_STATUSES, value: filterStatus, onChange: setFilterStatus },
                         { key: 'dateFrom', label: 'From Date', type: 'date', value: dateFrom, onChange: setDateFrom },
                         { key: 'dateTo', label: 'To Date', type: 'date', value: dateTo, onChange: setDateTo },
                     ]}
@@ -245,7 +223,7 @@ const PurchaseOrders = () => {
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="data-table" data-testid="po-table">
-                                <thead><tr><th>#</th><th>Date</th><th>Company</th><th>Brand</th><th>Size</th><th>Qty</th><th>Status</th><th>Dispatch</th><th>By</th><th></th></tr></thead>
+                                <thead><tr><th>#</th><th>Date</th><th>Company</th><th>Brand</th><th>Size</th><th>Qty</th><th>Dispatched</th><th>By</th><th></th></tr></thead>
                                 <tbody>
                                     {paginatedOrders.map((po, idx) => (
                                         <tr key={po.id} data-testid={`po-row-${po.id}`}>
@@ -256,19 +234,18 @@ const PurchaseOrders = () => {
                                             <td><Badge variant="outline">{po.size_name}</Badge></td>
                                             <td className="font-mono">{formatNumber(po.quantity)}</td>
                                             <td>
-                                                <Select value={po.status} onValueChange={(v) => handleStatusChange(po.id, v)}>
-                                                    <SelectTrigger className={`w-36 h-8 text-xs ${getStatusColor(po.status)} rounded-sm`}><SelectValue>{getPOStatusLabel(po.status)}</SelectValue></SelectTrigger>
-                                                    <SelectContent className="bg-card border-border rounded-sm">
-                                                        {PO_STATUSES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
-                                                    </SelectContent>
-                                                </Select>
-                                            </td>
-                                            <td>
-                                                {po.dispatch_id ? (
-                                                    <Badge variant="secondary" className="text-xs"><Truck className="w-3 h-3 mr-1" /> Linked</Badge>
-                                                ) : (
-                                                    <span className="text-muted-foreground text-xs">-</span>
-                                                )}
+                                                <div className="space-y-1">
+                                                    <div className="flex justify-between text-xs font-mono">
+                                                        <span>{formatNumber(po.quantity_dispatched || 0)}</span>
+                                                        <span className="text-muted-foreground">/ {formatNumber(po.quantity)}</span>
+                                                    </div>
+                                                    <div className="w-full h-2 bg-secondary rounded-sm overflow-hidden">
+                                                        <div
+                                                            className="h-full bg-primary rounded-sm transition-all"
+                                                            style={{ width: `${Math.min(100, ((po.quantity_dispatched || 0) / po.quantity) * 100)}%` }}
+                                                        />
+                                                    </div>
+                                                </div>
                                             </td>
                                             <td className="text-muted-foreground">{po.created_by}</td>
                                             <td>

@@ -24,6 +24,8 @@ import {
     X,
     Package,
     User,
+    Users,
+    Layers,
     ChevronLeft,
     ChevronRight,
     ChevronDown
@@ -31,13 +33,17 @@ import {
 
 const navItems = [
     { path: '/dashboard', label: 'DASHBOARD', icon: LayoutDashboard },
+    { path: '/raw-material-stock', label: 'RAW MATERIAL STOCK', icon: Layers },
+    { path: '/printing-stock', label: 'PRINTING STOCK', icon: Printer },
+    { path: '/finished-goods', label: 'FINISHED GOODS', icon: Package },
     { path: '/purchase-orders', label: 'PURCHASE ORDERS', icon: ClipboardList },
     { path: '/purchase', label: 'PURCHASE', icon: ShoppingCart },
     { path: '/printing', label: 'PRINTING/COATING', icon: Printer },
     { path: '/production', label: 'PRODUCTION', icon: Factory },
     { path: '/dispatch', label: 'DISPATCH', icon: Truck },
-    { path: '/brands', label: 'BRANDS', icon: Tag },
-    { path: '/sizes', label: 'SIZES', icon: Ruler },
+    { path: '/customers', label: 'CUSTOMERS', icon: Users, adminOnly: true },
+    { path: '/brands', label: 'BRANDS', icon: Tag, adminOnly: true },
+    { path: '/sizes', label: 'SIZES', icon: Ruler, adminOnly: true },
     { path: '/admin', label: 'USERS', icon: Settings, adminOnly: true },
 ];
 

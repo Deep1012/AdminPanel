@@ -1,7 +1,10 @@
 const express = require("express");
 const { v4: uuidv4 } = require("uuid");
 const Production = require("../models/Production");
+const Brand = require("../models/Brand");
 const { authenticate } = require("../middleware/auth");
+
+const CASCADING_BRAND_NAMES = ["BOTTOM", "TOP", "LID"];
 
 const router = express.Router();
 
@@ -24,6 +27,31 @@ router.post("/", authenticate, async (req, res) => {
       production_date: now,
       created_by: req.user.username,
     });
+
+    // Cascading BOTTOM/TOP/LID logic
+    const isCascadingBrand = CASCADING_BRAND_NAMES.includes(brand_name?.toUpperCase());
+    if (!isCascadingBrand) {
+      const cascadingBrands = await Brand.find(
+        { name: { $in: CASCADING_BRAND_NAMES } },
+        { _id: 0, __v: 0 }
+      ).lean();
+
+      if (cascadingBrands.length > 0) {
+        const cascadingDocs = cascadingBrands.map(cb => ({
+          id: uuidv4(),
+          brand_id: cb.id,
+          brand_name: cb.name,
+          size_id,
+          size_name,
+          quantity_produced,
+          printing_stock_used: printing_stock_used || quantity_produced,
+          notes: `Auto-created from ${brand_name} production`,
+          production_date: now,
+          created_by: req.user.username,
+        }));
+        await Production.insertMany(cascadingDocs);
+      }
+    }
 
     res.json(entry.toObject({ versionKey: false }));
   } catch (error) {

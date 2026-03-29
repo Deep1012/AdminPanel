@@ -30,7 +30,7 @@ const PURCHASE_EXPORT_COLUMNS = [
     { header: 'Created By', key: 'created_by' },
 ];
 
-const emptyForm = { sr_no: '', gauge: '', size1: '', size2: '', temper: '', weight: '', supplier: '', invoice_number: '', purchase_date: new Date().toISOString().split('T')[0] };
+const emptyForm = { gauge: '', size1: '', size2: '', temper: '', weight: '', supplier: '', invoice_number: '', purchase_date: new Date().toISOString().split('T')[0] };
 
 const Purchase = () => {
     const [purchases, setPurchases] = useState([]);
@@ -85,7 +85,7 @@ const Purchase = () => {
     const openEdit = (p) => {
         setEditingId(p.id);
         setFormData({
-            sr_no: p.sr_no, gauge: String(p.gauge), size1: String(p.size1), size2: String(p.size2),
+            gauge: String(p.gauge), size1: String(p.size1), size2: String(p.size2),
             temper: p.temper, weight: String(p.weight), supplier: p.supplier || '', invoice_number: p.invoice_number || '',
             purchase_date: p.purchase_date ? p.purchase_date.split('T')[0] : new Date().toISOString().split('T')[0],
         });
@@ -94,13 +94,13 @@ const Purchase = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!formData.sr_no || !formData.gauge || !formData.size1 || !formData.size2 || !formData.temper || !formData.weight) {
+        if (!formData.gauge || !formData.size1 || !formData.size2 || !formData.temper || !formData.weight) {
             toast.error('Please fill all required fields'); return;
         }
         setSubmitting(true);
         try {
             const payload = {
-                sr_no: formData.sr_no, gauge: parseFloat(formData.gauge), size1: parseFloat(formData.size1),
+                gauge: parseFloat(formData.gauge), size1: parseFloat(formData.size1),
                 size2: parseFloat(formData.size2), temper: formData.temper, weight: parseFloat(formData.weight),
                 supplier: formData.supplier || null, invoice_number: formData.invoice_number || null,
                 purchase_date: new Date(formData.purchase_date).toISOString(),
@@ -154,15 +154,9 @@ const Purchase = () => {
                             <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Date *</Label>
                             <Input type="date" value={formData.purchase_date} onChange={(e) => setFormData({ ...formData, purchase_date: e.target.value })} className="bg-background border-input rounded-sm font-mono" data-testid="purchase-date" />
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Sr. No *</Label>
-                                <Input value={formData.sr_no} onChange={(e) => setFormData({ ...formData, sr_no: e.target.value })} placeholder="e.g., RM-001" className="bg-background border-input rounded-sm font-mono" data-testid="purchase-sr-no" />
-                            </div>
-                            <div className="space-y-2">
-                                <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Gauge *</Label>
-                                <Input type="number" step="0.001" value={formData.gauge} onChange={(e) => setFormData({ ...formData, gauge: e.target.value })} placeholder="e.g., 0.22" className="bg-background border-input rounded-sm font-mono" data-testid="purchase-gauge" />
-                            </div>
+                        <div className="space-y-2">
+                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Gauge *</Label>
+                            <Input type="number" step="0.001" value={formData.gauge} onChange={(e) => setFormData({ ...formData, gauge: e.target.value })} placeholder="e.g., 0.22" className="bg-background border-input rounded-sm font-mono" data-testid="purchase-gauge" />
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
