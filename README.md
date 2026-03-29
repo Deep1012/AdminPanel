@@ -34,14 +34,24 @@ yarn start
 - Click it to seed brands, sizes, and admin user
 - Login with admin@crm.com / admin123
 
+### 4. Seed Sample Data (optional)
+```bash
+cd backend
+npm run seed    # Inserts 12 entries each into purchases, printing jobs, production, dispatches, purchase orders
+```
+
 ## Features
+- Purchase Order Management (6-stage status pipeline with auto-dispatch)
 - Raw Material Management (auto sheet calculation)
 - Printing/Coating Jobs (linked to raw materials, multi-brand support)
-- Production Tracking
-- Dispatch & Order Management
-- Dashboard with Stock Reports & Charts
-- Excel Export for all reports
+- Production Tracking (printing stock consumption)
+- Dispatch & Order Management (manual + auto-created from POs)
+- Dashboard with Stock Reports, Charts & Trend Indicators
+- Excel Export for all modules
+- Search & Filter on all data tables
+- Client-side Pagination (10/25/50/100 rows per page)
 - User Management with lock/unlock (admin only)
+- Responsive UI with collapsible sidebar
 
 ## Key Formulas
 - **No. of Sheets** = Weight / (Gauge x Size1 x Size2 / 100000 x 0.785)
@@ -57,6 +67,7 @@ AdminDashboard/
     middleware/auth.js      # JWT auth + role middleware
     models/                # Mongoose schemas
     routes/                # Express route handlers
+    seed-data.js           # Data seed script (npm run seed)
   frontend/
     src/
       App.js               # Router + protected routes

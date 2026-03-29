@@ -6,10 +6,21 @@ import { Label } from '../components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Badge } from '../components/ui/badge';
 import ConfirmDialog from '../components/ConfirmDialog';
+import TableSearch from '../components/TableSearch';
+import TablePagination from '../components/TablePagination';
+import { useTableFilter } from '../hooks/useTableFilter';
+import { usePagination } from '../hooks/usePagination';
 import { brandsAPI } from '../lib/api';
 import { formatDate } from '../lib/utils';
-import { Plus, Trash2, Pencil, Tag, Loader2, AlertCircle } from 'lucide-react';
+import { Plus, Trash2, Pencil, Tag, Loader2, AlertCircle, Download } from 'lucide-react';
 import { toast } from 'sonner';
+import { exportToExcel } from '../lib/exportToExcel';
+
+const BRANDS_EXPORT_COLUMNS = [
+    { header: '#', key: 'id', transform: (v, row, idx) => idx + 1 },
+    { header: 'Name', key: 'name' },
+    { header: 'Created', key: 'created_at', transform: (v) => formatDate(v) },
+];
 
 const Brands = () => {
     const [brands, setBrands] = useState([]);
@@ -19,6 +30,13 @@ const Brands = () => {
     const [editingId, setEditingId] = useState(null);
     const [brandName, setBrandName] = useState('');
     const [deleteTarget, setDeleteTarget] = useState(null);
+    const [searchTerm, setSearchTerm] = useState('');
+
+    const filteredBrands = useTableFilter({
+        data: brands, searchTerm, searchFields: ['name'], filters: []
+    });
+
+    const { paginatedData: paginatedBrands, currentPage, totalPages, pageSize, setCurrentPage, setPageSize, startIndex, PAGE_SIZE_OPTIONS } = usePagination({ data: filteredBrands });
 
     useEffect(() => { fetchBrands(); }, []);
 
@@ -29,7 +47,6 @@ const Brands = () => {
     };
 
     const openCreate = () => { setEditingId(null); setBrandName(''); setDialogOpen(true); };
-
     const openEdit = (brand) => { setEditingId(brand.id); setBrandName(brand.name); setDialogOpen(true); };
 
     const handleSubmit = async (e) => {
@@ -61,9 +78,18 @@ const Brands = () => {
         <div className="space-y-6 animate-fade-in" data-testid="brands-page">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <p className="text-muted-foreground">Manage paint brand product lines</p>
-                <Button onClick={openCreate} className="font-bold uppercase tracking-wider rounded-sm" data-testid="add-brand-btn">
-                    <Plus className="w-4 h-4 mr-2" /> Add Brand
-                </Button>
+                <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => {
+                        const data = filteredBrands.length > 0 ? filteredBrands : brands;
+                        if (exportToExcel({ data, columns: BRANDS_EXPORT_COLUMNS, fileName: 'Brands', sheetName: 'Brands' })) toast.success('Exported to Excel');
+                        else toast.error('No data to export');
+                    }} className="font-bold uppercase tracking-wider rounded-sm" data-testid="export-brands-btn">
+                        <Download className="w-4 h-4 mr-2" /> Export
+                    </Button>
+                    <Button onClick={openCreate} className="font-bold uppercase tracking-wider rounded-sm" data-testid="add-brand-btn">
+                        <Plus className="w-4 h-4 mr-2" /> Add Brand
+                    </Button>
+                </div>
             </div>
 
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -92,27 +118,47 @@ const Brands = () => {
                     <CardTitle className="font-display text-xl font-bold tracking-tight uppercase">Brand Management</CardTitle>
                     <Badge variant="outline">{brands.length} brands</Badge>
                 </CardHeader>
-                <CardContent>
+                <TableSearch
+                    searchValue={searchTerm}
+                    onSearchChange={setSearchTerm}
+                    searchPlaceholder="Search brands..."
+                    onClear={() => setSearchTerm('')}
+                    resultCount={filteredBrands.length}
+                    totalCount={brands.length}
+                />
+                <CardContent className="p-0">
                     {loading ? (
                         <div className="flex items-center justify-center h-48"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
-                    ) : brands.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center h-48 text-muted-foreground"><AlertCircle className="w-8 h-8 mb-2" /><p>No brands found</p></div>
+                    ) : filteredBrands.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-48 text-muted-foreground"><AlertCircle className="w-8 h-8 mb-2" /><p>{brands.length === 0 ? 'No brands found' : 'No matching brands'}</p></div>
                     ) : (
-                        <div className="flex flex-wrap gap-3">
-                            {brands.map((brand) => (
-                                <div key={brand.id} className="flex items-center gap-2 px-4 py-2 bg-secondary/50 rounded-sm border border-border" data-testid={`brand-${brand.id}`}>
-                                    <Tag className="w-4 h-4 text-primary" />
-                                    <span className="font-bold text-sm uppercase tracking-wider">{brand.name}</span>
-                                    <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-primary" onClick={() => openEdit(brand)}>
-                                        <Pencil className="w-3 h-3" />
-                                    </Button>
-                                    <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => setDeleteTarget(brand.id)}>
-                                        <Trash2 className="w-3 h-3" />
-                                    </Button>
-                                </div>
-                            ))}
+                        <div className="overflow-x-auto">
+                            <table className="data-table" data-testid="brands-table">
+                                <thead><tr><th>#</th><th>Name</th><th>Created</th><th></th></tr></thead>
+                                <tbody>
+                                    {paginatedBrands.map((brand, idx) => (
+                                        <tr key={brand.id} data-testid={`brand-row-${brand.id}`}>
+                                            <td className="text-muted-foreground">{startIndex + idx + 1}</td>
+                                            <td className="font-bold uppercase tracking-wider">
+                                                <div className="flex items-center gap-2">
+                                                    <Tag className="w-4 h-4 text-primary" />
+                                                    {brand.name}
+                                                </div>
+                                            </td>
+                                            <td className="text-muted-foreground">{formatDate(brand.created_at)}</td>
+                                            <td>
+                                                <div className="flex gap-1">
+                                                    <Button variant="ghost" size="icon" onClick={() => openEdit(brand)} className="text-muted-foreground hover:text-primary"><Pencil className="w-4 h-4" /></Button>
+                                                    <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(brand.id)} className="text-muted-foreground hover:text-destructive"><Trash2 className="w-4 h-4" /></Button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
                         </div>
                     )}
+                    <TablePagination currentPage={currentPage} totalPages={totalPages} pageSize={pageSize} totalItems={filteredBrands.length} startIndex={startIndex} onPageChange={setCurrentPage} onPageSizeChange={setPageSize} pageSizeOptions={PAGE_SIZE_OPTIONS} />
                 </CardContent>
             </Card>
         </div>

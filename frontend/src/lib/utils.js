@@ -46,6 +46,22 @@ export function getStatusColor(status) {
         completed: 'status-completed',
         dispatched: 'status-dispatched',
         delivered: 'status-delivered',
+        received: 'status-pending',
+        confirmed: 'status-in_progress',
+        in_production: 'status-in_progress',
+        ready: 'status-completed',
     };
     return statusMap[status] || 'status-pending';
+}
+
+export function getPOStatusLabel(status) {
+    const labels = {
+        received: 'Received',
+        confirmed: 'Confirmed',
+        in_production: 'In Production',
+        ready: 'Ready',
+        dispatched: 'Dispatched',
+        delivered: 'Delivered',
+    };
+    return labels[status] || status;
 }

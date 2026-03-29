@@ -81,11 +81,22 @@ export const dispatchAPI = {
     delete: (id) => api.delete(`/dispatch/${id}`),
 };
 
+export const purchaseOrdersAPI = {
+    getAll: () => api.get('/purchase-orders'),
+    create: (data) => api.post('/purchase-orders', data),
+    update: (id, data) => api.put(`/purchase-orders/${id}`, data),
+    delete: (id) => api.delete(`/purchase-orders/${id}`),
+};
+
 export const dashboardAPI = {
     getStats: () => api.get('/dashboard/stats'),
     getPurchaseStock: () => api.get('/dashboard/purchase-stock'),
     getPrintingStockList: () => api.get('/dashboard/printing-stock-list'),
     getFinishedGoodsList: () => api.get('/dashboard/finished-goods-list'),
+    getProductionTrend: (period = 'monthly') => api.get(`/dashboard/production-trend?period=${period}`),
+    getDispatchDistribution: () => api.get('/dashboard/dispatch-distribution'),
+    getRecentActivity: () => api.get('/dashboard/recent-activity'),
+    getPOSummary: () => api.get('/dashboard/po-summary'),
 };
 
 export default api;

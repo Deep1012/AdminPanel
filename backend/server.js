@@ -12,7 +12,7 @@ const printingJobRoutes = require("./routes/printingJobs");
 const productionRoutes = require("./routes/production");
 const dispatchRoutes = require("./routes/dispatch");
 const dashboardRoutes = require("./routes/dashboard");
-const seedRoutes = require("./routes/seed");
+const purchaseOrderRoutes = require("./routes/purchaseOrders");
 
 const app = express();
 const PORT = process.env.PORT || 8001;
@@ -34,7 +34,7 @@ app.use("/api/printing-jobs", printingJobRoutes);
 app.use("/api/production", productionRoutes);
 app.use("/api/dispatch", dispatchRoutes);
 app.use("/api/dashboard", dashboardRoutes);
-app.use("/api/seed", seedRoutes);
+app.use("/api/purchase-orders", purchaseOrderRoutes);
 
 // Health check
 app.get("/api", (req, res) => {

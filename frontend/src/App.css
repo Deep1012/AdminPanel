@@ -25,4 +25,24 @@
 /* Industrial card style */
 .industrial-card {
     @apply bg-card border border-border rounded-sm;
+    transition: border-color 200ms ease;
+}
+
+.industrial-card:hover {
+    border-color: hsl(24 95% 48% / 0.3);
+}
+
+/* Stat card top accent */
+.stat-card-accent {
+    border-top: 2px solid hsl(24 95% 48%);
+}
+
+/* Page transition */
+.animate-fade-in {
+    animation: fadeIn 300ms ease-in-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
 }

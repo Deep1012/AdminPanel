@@ -10,6 +10,7 @@ import Printing from './pages/Printing';
 import Production from './pages/Production';
 import Dispatch from './pages/Dispatch';
 import Admin from './pages/Admin';
+import PurchaseOrders from './pages/PurchaseOrders';
 import Brands from './pages/Brands';
 import Sizes from './pages/Sizes';
 import './App.css';
@@ -67,6 +68,11 @@ function AppRoutes() {
             <Route path="/dashboard" element={
                 <ProtectedRoute>
                     <Dashboard />
+                </ProtectedRoute>
+            } />
+            <Route path="/purchase-orders" element={
+                <ProtectedRoute>
+                    <PurchaseOrders />
                 </ProtectedRoute>
             } />
             <Route path="/purchase" element={

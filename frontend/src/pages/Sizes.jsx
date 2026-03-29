@@ -6,10 +6,21 @@ import { Label } from '../components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Badge } from '../components/ui/badge';
 import ConfirmDialog from '../components/ConfirmDialog';
+import TableSearch from '../components/TableSearch';
+import TablePagination from '../components/TablePagination';
+import { useTableFilter } from '../hooks/useTableFilter';
+import { usePagination } from '../hooks/usePagination';
 import { sizesAPI } from '../lib/api';
 import { formatDate } from '../lib/utils';
-import { Plus, Trash2, Pencil, Ruler, Loader2, AlertCircle } from 'lucide-react';
+import { Plus, Trash2, Pencil, Ruler, Loader2, AlertCircle, Download } from 'lucide-react';
 import { toast } from 'sonner';
+import { exportToExcel } from '../lib/exportToExcel';
+
+const SIZES_EXPORT_COLUMNS = [
+    { header: '#', key: 'id', transform: (v, row, idx) => idx + 1 },
+    { header: 'Name', key: 'name' },
+    { header: 'Created', key: 'created_at', transform: (v) => formatDate(v) },
+];
 
 const Sizes = () => {
     const [sizes, setSizes] = useState([]);
@@ -19,6 +30,13 @@ const Sizes = () => {
     const [editingId, setEditingId] = useState(null);
     const [sizeName, setSizeName] = useState('');
     const [deleteTarget, setDeleteTarget] = useState(null);
+    const [searchTerm, setSearchTerm] = useState('');
+
+    const filteredSizes = useTableFilter({
+        data: sizes, searchTerm, searchFields: ['name'], filters: []
+    });
+
+    const { paginatedData: paginatedSizes, currentPage, totalPages, pageSize, setCurrentPage, setPageSize, startIndex, PAGE_SIZE_OPTIONS } = usePagination({ data: filteredSizes });
 
     useEffect(() => { fetchSizes(); }, []);
 
@@ -29,7 +47,6 @@ const Sizes = () => {
     };
 
     const openCreate = () => { setEditingId(null); setSizeName(''); setDialogOpen(true); };
-
     const openEdit = (size) => { setEditingId(size.id); setSizeName(size.name); setDialogOpen(true); };
 
     const handleSubmit = async (e) => {
@@ -61,9 +78,18 @@ const Sizes = () => {
         <div className="space-y-6 animate-fade-in" data-testid="sizes-page">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <p className="text-muted-foreground">Manage container sizes for production</p>
-                <Button onClick={openCreate} className="font-bold uppercase tracking-wider rounded-sm" data-testid="add-size-btn">
-                    <Plus className="w-4 h-4 mr-2" /> Add Size
-                </Button>
+                <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => {
+                        const data = filteredSizes.length > 0 ? filteredSizes : sizes;
+                        if (exportToExcel({ data, columns: SIZES_EXPORT_COLUMNS, fileName: 'Sizes', sheetName: 'Sizes' })) toast.success('Exported to Excel');
+                        else toast.error('No data to export');
+                    }} className="font-bold uppercase tracking-wider rounded-sm" data-testid="export-sizes-btn">
+                        <Download className="w-4 h-4 mr-2" /> Export
+                    </Button>
+                    <Button onClick={openCreate} className="font-bold uppercase tracking-wider rounded-sm" data-testid="add-size-btn">
+                        <Plus className="w-4 h-4 mr-2" /> Add Size
+                    </Button>
+                </div>
             </div>
 
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -92,27 +118,47 @@ const Sizes = () => {
                     <CardTitle className="font-display text-xl font-bold tracking-tight uppercase">Size Management</CardTitle>
                     <Badge variant="outline">{sizes.length} sizes</Badge>
                 </CardHeader>
-                <CardContent>
+                <TableSearch
+                    searchValue={searchTerm}
+                    onSearchChange={setSearchTerm}
+                    searchPlaceholder="Search sizes..."
+                    onClear={() => setSearchTerm('')}
+                    resultCount={filteredSizes.length}
+                    totalCount={sizes.length}
+                />
+                <CardContent className="p-0">
                     {loading ? (
                         <div className="flex items-center justify-center h-48"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
-                    ) : sizes.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center h-48 text-muted-foreground"><AlertCircle className="w-8 h-8 mb-2" /><p>No sizes found</p></div>
+                    ) : filteredSizes.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-48 text-muted-foreground"><AlertCircle className="w-8 h-8 mb-2" /><p>{sizes.length === 0 ? 'No sizes found' : 'No matching sizes'}</p></div>
                     ) : (
-                        <div className="flex flex-wrap gap-3">
-                            {sizes.map((size) => (
-                                <div key={size.id} className="flex items-center gap-2 px-4 py-2 bg-secondary/50 rounded-sm border border-border" data-testid={`size-${size.id}`}>
-                                    <Ruler className="w-4 h-4 text-primary" />
-                                    <span className="font-bold text-sm uppercase tracking-wider">{size.name}</span>
-                                    <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-primary" onClick={() => openEdit(size)}>
-                                        <Pencil className="w-3 h-3" />
-                                    </Button>
-                                    <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => setDeleteTarget(size.id)}>
-                                        <Trash2 className="w-3 h-3" />
-                                    </Button>
-                                </div>
-                            ))}
+                        <div className="overflow-x-auto">
+                            <table className="data-table" data-testid="sizes-table">
+                                <thead><tr><th>#</th><th>Name</th><th>Created</th><th></th></tr></thead>
+                                <tbody>
+                                    {paginatedSizes.map((size, idx) => (
+                                        <tr key={size.id} data-testid={`size-row-${size.id}`}>
+                                            <td className="text-muted-foreground">{startIndex + idx + 1}</td>
+                                            <td className="font-bold uppercase tracking-wider">
+                                                <div className="flex items-center gap-2">
+                                                    <Ruler className="w-4 h-4 text-primary" />
+                                                    {size.name}
+                                                </div>
+                                            </td>
+                                            <td className="text-muted-foreground">{formatDate(size.created_at)}</td>
+                                            <td>
+                                                <div className="flex gap-1">
+                                                    <Button variant="ghost" size="icon" onClick={() => openEdit(size)} className="text-muted-foreground hover:text-primary"><Pencil className="w-4 h-4" /></Button>
+                                                    <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(size.id)} className="text-muted-foreground hover:text-destructive"><Trash2 className="w-4 h-4" /></Button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
                         </div>
                     )}
+                    <TablePagination currentPage={currentPage} totalPages={totalPages} pageSize={pageSize} totalItems={filteredSizes.length} startIndex={startIndex} onPageChange={setCurrentPage} onPageSizeChange={setPageSize} pageSizeOptions={PAGE_SIZE_OPTIONS} />
                 </CardContent>
             </Card>
         </div>

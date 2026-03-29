@@ -32,8 +32,12 @@ yarn build          # Production build
 yarn test           # Run tests
 ```
 
-### System Initialization
-POST `/api/seed` creates default brands, sizes, and admin user (admin@crm.com / admin123).
+### Seed Data
+```bash
+cd backend
+npm run seed         # Clear & re-seed 12 entries per operational collection
+```
+POST `/api/seed` creates default brands, sizes, and admin user (admin@crm.com / admin123) on first run.
 
 ## Architecture
 
@@ -43,10 +47,11 @@ Node.js + Express + Mongoose. Structured into models, routes, middleware, and co
 - `server.js` - Express app entry, CORS, route mounting
 - `config/db.js` - MongoDB Atlas connection via Mongoose
 - `middleware/auth.js` - JWT verification (`authenticate`) and role gate (`adminRequired`)
-- `models/` - Mongoose schemas: User, Brand, Size, Purchase, PrintingJob, Production, Dispatch
-- `routes/` - Express routers: auth, users, brands, sizes, purchases, printingJobs, production, dispatch, dashboard, seed
+- `models/` - Mongoose schemas: User, Brand, Size, Purchase, PrintingJob, Production, Dispatch, PurchaseOrder
+- `routes/` - Express routers: auth, users, brands, sizes, purchases, printingJobs, production, dispatch, dashboard, purchaseOrders
+- `seed-data.js` - Standalone seed script (`npm run seed`) — clears operational data and inserts 12 entries per collection
 
-**Collections:** `users`, `brands`, `sizes`, `purchases`, `printingjobs`, `productions`, `dispatches`
+**Collections:** `users`, `brands`, `sizes`, `purchases`, `printingjobs`, `productions`, `dispatches`, `purchaseorders`
 
 **Auth:** JWT (HS256) with Bearer tokens. 24h expiry. Two roles: `admin` and `user`.
 
@@ -60,7 +65,12 @@ React 19 + CRA (via craco) + Tailwind CSS 3 + shadcn/ui (new-york style, JSX not
 - `src/context/AuthContext.js` - Auth state (token in localStorage, user object)
 - `src/components/Layout.jsx` - Sidebar + header shell wrapping all protected pages
 - `src/components/ui/` - shadcn/ui primitives (do not edit manually; use shadcn CLI to add)
-- `src/pages/` - Route pages: Login, Dashboard, Purchase, Printing, Production, Dispatch, Admin
+- `src/pages/` - Route pages: Login, Dashboard, PurchaseOrders, Purchase, Printing, Production, Dispatch, Brands, Sizes, Admin
+- `src/hooks/usePagination.js` - Client-side pagination hook (all tables)
+- `src/hooks/useTableFilter.js` - Client-side search/filter hook
+- `src/components/TablePagination.jsx` - Pagination UI component
+- `src/components/TableSearch.jsx` - Search bar component
+- `src/lib/exportToExcel.js` - Excel export utility
 
 **Routing:** react-router-dom v7. `ProtectedRoute` wraps authenticated pages; `PublicRoute` wraps login. Admin page requires `adminOnly` flag.
 

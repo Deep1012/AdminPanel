@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -7,10 +7,25 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Textarea } from '../components/ui/textarea';
 import ConfirmDialog from '../components/ConfirmDialog';
+import TableSearch from '../components/TableSearch';
+import TablePagination from '../components/TablePagination';
+import { useTableFilter } from '../hooks/useTableFilter';
+import { usePagination } from '../hooks/usePagination';
 import { productionAPI, brandsAPI, sizesAPI } from '../lib/api';
 import { formatDate, formatNumber } from '../lib/utils';
-import { Plus, Trash2, Pencil, Factory, Loader2, AlertCircle } from 'lucide-react';
+import { Plus, Trash2, Pencil, Factory, Loader2, AlertCircle, Download } from 'lucide-react';
 import { toast } from 'sonner';
+import { exportToExcel } from '../lib/exportToExcel';
+
+const PRODUCTION_EXPORT_COLUMNS = [
+    { header: 'Date', key: 'production_date', transform: (v) => formatDate(v) },
+    { header: 'Size', key: 'size_name' },
+    { header: 'Brand', key: 'brand_name' },
+    { header: 'Printing Stock Used', key: 'printing_stock_used', transform: (v) => v || 0 },
+    { header: 'Qty Produced', key: 'quantity_produced' },
+    { header: 'Notes', key: 'notes', transform: (v) => v || '-' },
+    { header: 'Created By', key: 'created_by' },
+];
 
 const emptyForm = {
     brand_id: '', size_id: '', quantity_produced: '', printing_stock_used: '', notes: '',
@@ -28,6 +43,21 @@ const Production = () => {
     const [formData, setFormData] = useState({ ...emptyForm });
     const [deleteTarget, setDeleteTarget] = useState(null);
 
+    const [searchTerm, setSearchTerm] = useState('');
+    const [dateFrom, setDateFrom] = useState('');
+    const [dateTo, setDateTo] = useState('');
+
+    const filters = useMemo(() => [
+        ...(dateFrom ? [{ key: 'production_date', value: dateFrom, type: 'dateFrom' }] : []),
+        ...(dateTo ? [{ key: 'production_date', value: dateTo, type: 'dateTo' }] : []),
+    ], [dateFrom, dateTo]);
+
+    const filteredProduction = useTableFilter({
+        data: production, searchTerm, searchFields: ['brand_name', 'size_name'], filters
+    });
+
+    const { paginatedData: paginatedProduction, currentPage, totalPages, pageSize, setCurrentPage, setPageSize, startIndex, PAGE_SIZE_OPTIONS } = usePagination({ data: filteredProduction });
+
     useEffect(() => { fetchData(); }, []);
 
     const fetchData = async () => {
@@ -36,15 +66,12 @@ const Production = () => {
             const [prodRes, brandsRes, sizesRes] = await Promise.all([
                 productionAPI.getAll(), brandsAPI.getAll(), sizesAPI.getAll()
             ]);
-            setProduction(prodRes.data);
-            setBrands(brandsRes.data);
-            setSizes(sizesRes.data);
+            setProduction(prodRes.data); setBrands(brandsRes.data); setSizes(sizesRes.data);
         } catch (err) { toast.error('Failed to load data'); }
         finally { setLoading(false); }
     };
 
     const openCreate = () => { setEditingId(null); setFormData({ ...emptyForm }); setDialogOpen(true); };
-
     const openEdit = (entry) => {
         setEditingId(entry.id);
         setFormData({
@@ -73,15 +100,9 @@ const Production = () => {
                 notes: formData.notes || null,
                 production_date: new Date(formData.production_date).toISOString(),
             };
-            if (editingId) {
-                await productionAPI.update(editingId, payload);
-                toast.success('Entry updated');
-            } else {
-                await productionAPI.create(payload);
-                toast.success('Entry added');
-            }
-            setDialogOpen(false);
-            fetchData();
+            if (editingId) { await productionAPI.update(editingId, payload); toast.success('Entry updated'); }
+            else { await productionAPI.create(payload); toast.success('Entry added'); }
+            setDialogOpen(false); fetchData();
         } catch (err) { toast.error('Failed to save entry'); }
         finally { setSubmitting(false); }
     };
@@ -93,6 +114,8 @@ const Production = () => {
         finally { setDeleteTarget(null); }
     };
 
+    const clearFilters = () => { setSearchTerm(''); setDateFrom(''); setDateTo(''); };
+
     const totalProduced = production.reduce((sum, p) => sum + (p.quantity_produced || 0), 0);
     const totalPrintingUsed = production.reduce((sum, p) => sum + (p.printing_stock_used || 0), 0);
 
@@ -100,9 +123,18 @@ const Production = () => {
         <div className="space-y-6 animate-fade-in" data-testid="production-page">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <p className="text-muted-foreground">Record finished goods production</p>
-                <Button onClick={openCreate} className="font-bold uppercase tracking-wider rounded-sm" data-testid="add-production-btn">
-                    <Plus className="w-4 h-4 mr-2" /> Add Production
-                </Button>
+                <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => {
+                        const data = filteredProduction.length > 0 ? filteredProduction : production;
+                        if (exportToExcel({ data, columns: PRODUCTION_EXPORT_COLUMNS, fileName: 'Production', sheetName: 'Production' })) toast.success('Exported to Excel');
+                        else toast.error('No data to export');
+                    }} className="font-bold uppercase tracking-wider rounded-sm" data-testid="export-production-btn">
+                        <Download className="w-4 h-4 mr-2" /> Export
+                    </Button>
+                    <Button onClick={openCreate} className="font-bold uppercase tracking-wider rounded-sm" data-testid="add-production-btn">
+                        <Plus className="w-4 h-4 mr-2" /> Add Production
+                    </Button>
+                </div>
             </div>
 
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -120,23 +152,15 @@ const Production = () => {
                         <div className="space-y-2">
                             <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Size *</Label>
                             <Select value={formData.size_id} onValueChange={(v) => setFormData({ ...formData, size_id: v })}>
-                                <SelectTrigger className="bg-background border-input rounded-sm" data-testid="prod-size">
-                                    <SelectValue placeholder="Select size" />
-                                </SelectTrigger>
-                                <SelectContent className="bg-card border-border rounded-sm">
-                                    {sizes.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-                                </SelectContent>
+                                <SelectTrigger className="bg-background border-input rounded-sm" data-testid="prod-size"><SelectValue placeholder="Select size" /></SelectTrigger>
+                                <SelectContent className="bg-card border-border rounded-sm">{sizes.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
                             </Select>
                         </div>
                         <div className="space-y-2">
                             <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Brand *</Label>
                             <Select value={formData.brand_id} onValueChange={(v) => setFormData({ ...formData, brand_id: v })}>
-                                <SelectTrigger className="bg-background border-input rounded-sm" data-testid="prod-brand">
-                                    <SelectValue placeholder="Select brand" />
-                                </SelectTrigger>
-                                <SelectContent className="bg-card border-border rounded-sm max-h-60">
-                                    {brands.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
-                                </SelectContent>
+                                <SelectTrigger className="bg-background border-input rounded-sm" data-testid="prod-brand"><SelectValue placeholder="Select brand" /></SelectTrigger>
+                                <SelectContent className="bg-card border-border rounded-sm max-h-60">{brands.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
                             </Select>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
@@ -170,17 +194,29 @@ const Production = () => {
 
             <Card className="industrial-card">
                 <CardHeader><CardTitle className="font-display text-xl font-bold tracking-tight uppercase">Production Records</CardTitle></CardHeader>
+                <TableSearch
+                    searchValue={searchTerm}
+                    onSearchChange={setSearchTerm}
+                    searchPlaceholder="Search by brand, size..."
+                    filters={[
+                        { key: 'dateFrom', label: 'From Date', type: 'date', value: dateFrom, onChange: setDateFrom },
+                        { key: 'dateTo', label: 'To Date', type: 'date', value: dateTo, onChange: setDateTo },
+                    ]}
+                    onClear={clearFilters}
+                    resultCount={filteredProduction.length}
+                    totalCount={production.length}
+                />
                 <CardContent className="p-0">
                     {loading ? (
                         <div className="flex items-center justify-center h-48"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
-                    ) : production.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center h-48 text-muted-foreground"><AlertCircle className="w-8 h-8 mb-2" /><p>No production records</p></div>
+                    ) : filteredProduction.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-48 text-muted-foreground"><AlertCircle className="w-8 h-8 mb-2" /><p>{production.length === 0 ? 'No production records' : 'No matching records'}</p></div>
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="data-table" data-testid="production-table">
                                 <thead><tr><th>Date</th><th>Size</th><th>Brand</th><th>Printing Used</th><th>Qty Produced</th><th>Notes</th><th>By</th><th></th></tr></thead>
                                 <tbody>
-                                    {production.map((entry) => (
+                                    {paginatedProduction.map((entry) => (
                                         <tr key={entry.id} data-testid={`production-row-${entry.id}`}>
                                             <td>{formatDate(entry.production_date)}</td>
                                             <td className="font-medium">{entry.size_name}</td>
@@ -201,6 +237,7 @@ const Production = () => {
                             </table>
                         </div>
                     )}
+                    <TablePagination currentPage={currentPage} totalPages={totalPages} pageSize={pageSize} totalItems={filteredProduction.length} startIndex={startIndex} onPageChange={setCurrentPage} onPageSizeChange={setPageSize} pageSizeOptions={PAGE_SIZE_OPTIONS} />
                 </CardContent>
             </Card>
         </div>

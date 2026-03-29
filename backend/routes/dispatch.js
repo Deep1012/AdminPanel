@@ -33,6 +33,18 @@ router.post("/", authenticate, async (req, res) => {
   }
 });
 
+// GET single dispatch by ID
+router.get("/:dispatchId", authenticate, async (req, res) => {
+  try {
+    const entry = await Dispatch.findOne({ id: req.params.dispatchId }, { _id: 0, __v: 0 }).lean();
+    if (!entry) return res.status(404).json({ detail: "Dispatch not found" });
+    res.json(entry);
+  } catch (error) {
+    res.status(500).json({ detail: error.message });
+  }
+});
+
+// GET all dispatches
 router.get("/", authenticate, async (req, res) => {
   try {
     const entries = await Dispatch.find({}, { _id: 0, __v: 0 }).sort({ dispatch_date: -1 });
@@ -62,12 +74,13 @@ router.put("/:dispatchId", authenticate, async (req, res) => {
       return res.status(400).json({ detail: "No fields to update" });
     }
 
-    const result = await Dispatch.updateOne({ id: req.params.dispatchId }, { $set: updateData });
+    const result = await Dispatch.updateOne({ id: req.params.dispatchId }, { $set: updateData }, { runValidators: true });
     if (result.matchedCount === 0) {
       return res.status(404).json({ detail: "Dispatch not found" });
     }
 
-    res.json({ message: "Dispatch updated successfully" });
+    const updated = await Dispatch.findOne({ id: req.params.dispatchId }, { _id: 0, __v: 0 }).lean();
+    res.json(updated);
   } catch (error) {
     res.status(500).json({ detail: error.message });
   }

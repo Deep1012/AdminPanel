@@ -8,10 +8,23 @@ import { Badge } from '../components/ui/badge';
 import { Switch } from '../components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import ConfirmDialog from '../components/ConfirmDialog';
+import TableSearch from '../components/TableSearch';
+import TablePagination from '../components/TablePagination';
+import { useTableFilter } from '../hooks/useTableFilter';
+import { usePagination } from '../hooks/usePagination';
 import { usersAPI, authAPI } from '../lib/api';
 import { formatDate } from '../lib/utils';
-import { Trash2, Pencil, Users, Loader2, AlertCircle, Lock, Unlock, UserPlus } from 'lucide-react';
+import { Trash2, Pencil, Loader2, AlertCircle, Lock, Unlock, UserPlus, Download } from 'lucide-react';
 import { toast } from 'sonner';
+import { exportToExcel } from '../lib/exportToExcel';
+
+const USERS_EXPORT_COLUMNS = [
+    { header: 'Username', key: 'username' },
+    { header: 'Email', key: 'email' },
+    { header: 'Role', key: 'role' },
+    { header: 'Created', key: 'created_at', transform: (v) => formatDate(v) },
+    { header: 'Locked', key: 'is_locked', transform: (v) => v ? 'Yes' : 'No' },
+];
 
 const emptyUser = { username: '', email: '', password: '', role: 'user' };
 
@@ -23,6 +36,13 @@ const Admin = () => {
     const [editingId, setEditingId] = useState(null);
     const [formData, setFormData] = useState({ ...emptyUser });
     const [deleteTarget, setDeleteTarget] = useState(null);
+    const [searchTerm, setSearchTerm] = useState('');
+
+    const filteredUsers = useTableFilter({
+        data: users, searchTerm, searchFields: ['username', 'email'], filters: []
+    });
+
+    const { paginatedData: paginatedUsers, currentPage, totalPages, pageSize, setCurrentPage, setPageSize, startIndex, PAGE_SIZE_OPTIONS } = usePagination({ data: filteredUsers });
 
     useEffect(() => { fetchData(); }, []);
 
@@ -33,7 +53,6 @@ const Admin = () => {
     };
 
     const openCreate = () => { setEditingId(null); setFormData({ ...emptyUser }); setDialogOpen(true); };
-
     const openEdit = (user) => {
         setEditingId(user.id);
         setFormData({ username: user.username, email: user.email, password: '', role: user.role });
@@ -55,8 +74,7 @@ const Admin = () => {
                 await authAPI.register(formData);
                 toast.success(`User created! Credentials: ${formData.email} / ${formData.password}`);
             }
-            setDialogOpen(false);
-            fetchData();
+            setDialogOpen(false); fetchData();
         } catch (err) { toast.error(err.response?.data?.detail || 'Failed to save user'); }
         finally { setSubmitting(false); }
     };
@@ -79,9 +97,18 @@ const Admin = () => {
         <div className="space-y-6 animate-fade-in" data-testid="admin-page">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <p className="text-muted-foreground">Manage system users and access control</p>
-                <Button onClick={openCreate} className="font-bold uppercase tracking-wider rounded-sm" data-testid="add-user-btn">
-                    <UserPlus className="w-4 h-4 mr-2" /> Add User
-                </Button>
+                <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => {
+                        const data = filteredUsers.length > 0 ? filteredUsers : users;
+                        if (exportToExcel({ data, columns: USERS_EXPORT_COLUMNS, fileName: 'Users', sheetName: 'Users' })) toast.success('Exported to Excel');
+                        else toast.error('No data to export');
+                    }} className="font-bold uppercase tracking-wider rounded-sm" data-testid="export-users-btn">
+                        <Download className="w-4 h-4 mr-2" /> Export
+                    </Button>
+                    <Button onClick={openCreate} className="font-bold uppercase tracking-wider rounded-sm" data-testid="add-user-btn">
+                        <UserPlus className="w-4 h-4 mr-2" /> Add User
+                    </Button>
+                </div>
             </div>
 
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -104,7 +131,7 @@ const Admin = () => {
                             <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
                                 Password {editingId ? '(leave blank to keep current)' : '*'}
                             </Label>
-                            <Input type="text" value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} placeholder={editingId ? '••••••••' : 'Create password'} className="bg-background border-input rounded-sm font-mono" data-testid="new-user-password" />
+                            <Input type="text" value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} placeholder={editingId ? '--------' : 'Create password'} className="bg-background border-input rounded-sm font-mono" data-testid="new-user-password" />
                         </div>
                         <div className="space-y-2">
                             <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Role</Label>
@@ -137,15 +164,23 @@ const Admin = () => {
                     <CardTitle className="font-display text-xl font-bold tracking-tight uppercase">User Management</CardTitle>
                     <Badge variant="outline">{users.length} users</Badge>
                 </CardHeader>
+                <TableSearch
+                    searchValue={searchTerm}
+                    onSearchChange={setSearchTerm}
+                    searchPlaceholder="Search by username, email..."
+                    onClear={() => setSearchTerm('')}
+                    resultCount={filteredUsers.length}
+                    totalCount={users.length}
+                />
                 <CardContent className="p-0">
-                    {users.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center h-48 text-muted-foreground"><AlertCircle className="w-8 h-8 mb-2" /><p>No users</p></div>
+                    {filteredUsers.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-48 text-muted-foreground"><AlertCircle className="w-8 h-8 mb-2" /><p>{users.length === 0 ? 'No users' : 'No matching users'}</p></div>
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="data-table" data-testid="users-table">
                                 <thead><tr><th>Username</th><th>Email</th><th>Role</th><th>Created</th><th>Locked</th><th></th></tr></thead>
                                 <tbody>
-                                    {users.map((user) => (
+                                    {paginatedUsers.map((user) => (
                                         <tr key={user.id} data-testid={`user-row-${user.id}`}>
                                             <td className="font-medium">{user.username}</td>
                                             <td className="font-mono text-muted-foreground">{user.email}</td>
@@ -169,6 +204,7 @@ const Admin = () => {
                             </table>
                         </div>
                     )}
+                    <TablePagination currentPage={currentPage} totalPages={totalPages} pageSize={pageSize} totalItems={filteredUsers.length} startIndex={startIndex} onPageChange={setCurrentPage} onPageSizeChange={setPageSize} pageSizeOptions={PAGE_SIZE_OPTIONS} />
                 </CardContent>
             </Card>
         </div>

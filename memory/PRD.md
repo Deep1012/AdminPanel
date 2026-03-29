@@ -41,29 +41,34 @@ Build a CRM system for managing manufacturing workflow at a paint can factory:
 - [x] JWT Authentication with login/logout
 - [x] User management with lock/unlock feature
 - [x] 70+ brands and 6 sizes pre-seeded
-- [x] Purchase management module
+- [x] Purchase management module (auto sheet calculation)
 - [x] Printing/Coating job management with multi-brand support
 - [x] Production tracking module
 - [x] Dispatch and order management
-- [x] Dashboard with stats cards and charts
-- [x] Admin panel (Users, Brands, Sizes tabs)
+- [x] Purchase Order management (6-stage status pipeline, auto-dispatch creation)
+- [x] Dashboard with stats cards, charts, trend indicators
+- [x] Admin panel (Users, Brands, Sizes pages)
 - [x] Industrial dark theme UI
-- [x] Responsive sidebar navigation
+- [x] Responsive sidebar navigation with collapsible toggle
+- [x] Header profile dropdown with avatar
 - [x] Backend migrated from Python/FastAPI to Node.js/Express (March 2026)
+- [x] Excel export for all modules (xlsx + file-saver)
+- [x] Search and filter on all data tables
+- [x] Client-side pagination on all tables (10/25/50/100 per page)
+- [x] Standalone seed script (npm run seed) with 12 entries per collection
+- [x] CRM.md user guide documentation
+- [x] Mongoose runValidators on all update operations
 
 ## Prioritized Backlog
-### P1 (High Priority)
-- Export reports to Excel/PDF
-- Search and filter on all data tables
-- Date range filtering for reports
-
 ### P2 (Medium Priority)
 - Batch printing job creation
 - Stock alerts/notifications
 - Audit trail for changes
+- Date range filtering for reports
 
 ### P3 (Low Priority)
 - Dark/Light theme toggle
 - Multi-language support
 - Barcode integration
 - Dashboard customization
+- Export to PDF

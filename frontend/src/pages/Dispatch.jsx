@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -8,10 +8,26 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Badge } from '../components/ui/badge';
 import { Textarea } from '../components/ui/textarea';
 import ConfirmDialog from '../components/ConfirmDialog';
+import TableSearch from '../components/TableSearch';
+import TablePagination from '../components/TablePagination';
+import { useTableFilter } from '../hooks/useTableFilter';
+import { usePagination } from '../hooks/usePagination';
 import { dispatchAPI, brandsAPI, sizesAPI } from '../lib/api';
 import { formatDate, formatNumber, getStatusColor } from '../lib/utils';
-import { Plus, Trash2, Pencil, Truck, Loader2, AlertCircle } from 'lucide-react';
+import { Plus, Trash2, Pencil, Truck, Loader2, AlertCircle, Download } from 'lucide-react';
 import { toast } from 'sonner';
+import { exportToExcel } from '../lib/exportToExcel';
+
+const DISPATCH_EXPORT_COLUMNS = [
+    { header: 'Date', key: 'dispatch_date', transform: (v) => formatDate(v) },
+    { header: 'Order #', key: 'order_number' },
+    { header: 'Customer', key: 'customer_name' },
+    { header: 'Brand', key: 'brand_name' },
+    { header: 'Size', key: 'size_name' },
+    { header: 'Quantity', key: 'quantity' },
+    { header: 'Status', key: 'status' },
+    { header: 'Created By', key: 'created_by' },
+];
 
 const emptyForm = {
     order_number: '', customer_name: '', brand_id: '', size_id: '', quantity: '',
@@ -29,6 +45,23 @@ const Dispatch = () => {
     const [formData, setFormData] = useState({ ...emptyForm });
     const [deleteTarget, setDeleteTarget] = useState(null);
 
+    const [searchTerm, setSearchTerm] = useState('');
+    const [filterStatus, setFilterStatus] = useState('');
+    const [dateFrom, setDateFrom] = useState('');
+    const [dateTo, setDateTo] = useState('');
+
+    const filters = useMemo(() => [
+        ...(filterStatus ? [{ key: 'status', value: filterStatus, type: 'exact' }] : []),
+        ...(dateFrom ? [{ key: 'dispatch_date', value: dateFrom, type: 'dateFrom' }] : []),
+        ...(dateTo ? [{ key: 'dispatch_date', value: dateTo, type: 'dateTo' }] : []),
+    ], [filterStatus, dateFrom, dateTo]);
+
+    const filteredDispatches = useTableFilter({
+        data: dispatches, searchTerm, searchFields: ['order_number', 'customer_name'], filters
+    });
+
+    const { paginatedData: paginatedDispatches, currentPage, totalPages, pageSize, setCurrentPage, setPageSize, startIndex, PAGE_SIZE_OPTIONS } = usePagination({ data: filteredDispatches });
+
     useEffect(() => { fetchData(); }, []);
 
     const fetchData = async () => {
@@ -37,15 +70,12 @@ const Dispatch = () => {
             const [dispatchRes, brandsRes, sizesRes] = await Promise.all([
                 dispatchAPI.getAll(), brandsAPI.getAll(), sizesAPI.getAll()
             ]);
-            setDispatches(dispatchRes.data);
-            setBrands(brandsRes.data);
-            setSizes(sizesRes.data);
+            setDispatches(dispatchRes.data); setBrands(brandsRes.data); setSizes(sizesRes.data);
         } catch (err) { toast.error('Failed to load data'); }
         finally { setLoading(false); }
     };
 
     const openCreate = () => { setEditingId(null); setFormData({ ...emptyForm }); setDialogOpen(true); };
-
     const openEdit = (d) => {
         setEditingId(d.id);
         setFormData({
@@ -72,19 +102,12 @@ const Dispatch = () => {
                 brand_id: formData.brand_id, brand_name: brand?.name || '',
                 size_id: formData.size_id, size_name: size?.name || '',
                 quantity: parseInt(formData.quantity),
-                delivery_address: formData.delivery_address || null,
-                notes: formData.notes || null,
+                delivery_address: formData.delivery_address || null, notes: formData.notes || null,
                 dispatch_date: new Date(formData.dispatch_date).toISOString(),
             };
-            if (editingId) {
-                await dispatchAPI.update(editingId, payload);
-                toast.success('Dispatch updated');
-            } else {
-                await dispatchAPI.create(payload);
-                toast.success('Dispatch created');
-            }
-            setDialogOpen(false);
-            fetchData();
+            if (editingId) { await dispatchAPI.update(editingId, payload); toast.success('Dispatch updated'); }
+            else { await dispatchAPI.create(payload); toast.success('Dispatch created'); }
+            setDialogOpen(false); fetchData();
         } catch (err) { toast.error('Failed to save dispatch'); }
         finally { setSubmitting(false); }
     };
@@ -101,6 +124,8 @@ const Dispatch = () => {
         finally { setDeleteTarget(null); }
     };
 
+    const clearFilters = () => { setSearchTerm(''); setFilterStatus(''); setDateFrom(''); setDateTo(''); };
+
     const totalQuantity = dispatches.reduce((sum, d) => sum + (d.quantity || 0), 0);
     const pendingOrders = dispatches.filter(d => d.status === 'pending').length;
 
@@ -108,9 +133,18 @@ const Dispatch = () => {
         <div className="space-y-6 animate-fade-in" data-testid="dispatch-page">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <p className="text-muted-foreground">Manage dispatch orders and shipments</p>
-                <Button onClick={openCreate} className="font-bold uppercase tracking-wider rounded-sm" data-testid="add-dispatch-btn">
-                    <Plus className="w-4 h-4 mr-2" /> New Dispatch
-                </Button>
+                <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => {
+                        const data = filteredDispatches.length > 0 ? filteredDispatches : dispatches;
+                        if (exportToExcel({ data, columns: DISPATCH_EXPORT_COLUMNS, fileName: 'Dispatches', sheetName: 'Dispatches' })) toast.success('Exported to Excel');
+                        else toast.error('No data to export');
+                    }} className="font-bold uppercase tracking-wider rounded-sm" data-testid="export-dispatch-btn">
+                        <Download className="w-4 h-4 mr-2" /> Export
+                    </Button>
+                    <Button onClick={openCreate} className="font-bold uppercase tracking-wider rounded-sm" data-testid="add-dispatch-btn">
+                        <Plus className="w-4 h-4 mr-2" /> New Dispatch
+                    </Button>
+                </div>
             </div>
 
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -138,24 +172,16 @@ const Dispatch = () => {
                         <div className="space-y-2">
                             <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Brand *</Label>
                             <Select value={formData.brand_id} onValueChange={(v) => setFormData({ ...formData, brand_id: v })}>
-                                <SelectTrigger className="bg-background border-input rounded-sm" data-testid="dispatch-brand">
-                                    <SelectValue placeholder="Select brand" />
-                                </SelectTrigger>
-                                <SelectContent className="bg-card border-border rounded-sm max-h-60">
-                                    {brands.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
-                                </SelectContent>
+                                <SelectTrigger className="bg-background border-input rounded-sm" data-testid="dispatch-brand"><SelectValue placeholder="Select brand" /></SelectTrigger>
+                                <SelectContent className="bg-card border-border rounded-sm max-h-60">{brands.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
                             </Select>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Size *</Label>
                                 <Select value={formData.size_id} onValueChange={(v) => setFormData({ ...formData, size_id: v })}>
-                                    <SelectTrigger className="bg-background border-input rounded-sm" data-testid="dispatch-size">
-                                        <SelectValue placeholder="Select" />
-                                    </SelectTrigger>
-                                    <SelectContent className="bg-card border-border rounded-sm">
-                                        {sizes.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-                                    </SelectContent>
+                                    <SelectTrigger className="bg-background border-input rounded-sm" data-testid="dispatch-size"><SelectValue placeholder="Select" /></SelectTrigger>
+                                    <SelectContent className="bg-card border-border rounded-sm">{sizes.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
                                 </Select>
                             </div>
                             <div className="space-y-2">
@@ -188,17 +214,32 @@ const Dispatch = () => {
 
             <Card className="industrial-card">
                 <CardHeader><CardTitle className="font-display text-xl font-bold tracking-tight uppercase">Dispatch Orders</CardTitle></CardHeader>
+                <TableSearch
+                    searchValue={searchTerm}
+                    onSearchChange={setSearchTerm}
+                    searchPlaceholder="Search by order #, customer..."
+                    filters={[
+                        { key: 'status', label: 'Status', type: 'select', options: [
+                            { value: 'pending', label: 'Pending' }, { value: 'dispatched', label: 'Dispatched' }, { value: 'delivered', label: 'Delivered' }
+                        ], value: filterStatus, onChange: setFilterStatus },
+                        { key: 'dateFrom', label: 'From Date', type: 'date', value: dateFrom, onChange: setDateFrom },
+                        { key: 'dateTo', label: 'To Date', type: 'date', value: dateTo, onChange: setDateTo },
+                    ]}
+                    onClear={clearFilters}
+                    resultCount={filteredDispatches.length}
+                    totalCount={dispatches.length}
+                />
                 <CardContent className="p-0">
                     {loading ? (
                         <div className="flex items-center justify-center h-48"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
-                    ) : dispatches.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center h-48 text-muted-foreground"><AlertCircle className="w-8 h-8 mb-2" /><p>No dispatch orders found</p></div>
+                    ) : filteredDispatches.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-48 text-muted-foreground"><AlertCircle className="w-8 h-8 mb-2" /><p>{dispatches.length === 0 ? 'No dispatch orders found' : 'No matching orders'}</p></div>
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="data-table" data-testid="dispatch-table">
                                 <thead><tr><th>Date</th><th>Order #</th><th>Customer</th><th>Brand</th><th>Size</th><th>Qty</th><th>Status</th><th>By</th><th></th></tr></thead>
                                 <tbody>
-                                    {dispatches.map((d) => (
+                                    {paginatedDispatches.map((d) => (
                                         <tr key={d.id} data-testid={`dispatch-row-${d.id}`}>
                                             <td>{formatDate(d.dispatch_date)}</td>
                                             <td className="font-mono font-medium">{d.order_number}</td>
@@ -229,6 +270,7 @@ const Dispatch = () => {
                             </table>
                         </div>
                     )}
+                    <TablePagination currentPage={currentPage} totalPages={totalPages} pageSize={pageSize} totalItems={filteredDispatches.length} startIndex={startIndex} onPageChange={setCurrentPage} onPageSizeChange={setPageSize} pageSizeOptions={PAGE_SIZE_OPTIONS} />
                 </CardContent>
             </Card>
         </div>
