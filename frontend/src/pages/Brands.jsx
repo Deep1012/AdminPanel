@@ -12,6 +12,7 @@ import { useTableFilter } from '../hooks/useTableFilter';
 import { usePagination } from '../hooks/usePagination';
 import { brandsAPI } from '../lib/api';
 import { formatDate } from '../lib/utils';
+import { Switch } from '../components/ui/switch';
 import { Plus, Trash2, Pencil, Tag, Loader2, AlertCircle, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { exportToExcel } from '../lib/exportToExcel';
@@ -134,7 +135,7 @@ const Brands = () => {
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="data-table" data-testid="brands-table">
-                                <thead><tr><th>#</th><th>Name</th><th>Created</th><th></th></tr></thead>
+                                <thead><tr><th>#</th><th>Name</th><th>LWBF</th><th>Created</th><th></th></tr></thead>
                                 <tbody>
                                     {paginatedBrands.map((brand, idx) => (
                                         <tr key={brand.id} data-testid={`brand-row-${brand.id}`}>
@@ -144,6 +145,12 @@ const Brands = () => {
                                                     <Tag className="w-4 h-4 text-primary" />
                                                     {brand.name}
                                                 </div>
+                                            </td>
+                                            <td>
+                                                <Switch checked={brand.is_lwbf || false} onCheckedChange={async (v) => {
+                                                    try { await brandsAPI.update(brand.id, { is_lwbf: v }); fetchBrands(); }
+                                                    catch { toast.error('Failed to update'); }
+                                                }} />
                                             </td>
                                             <td className="text-muted-foreground">{formatDate(brand.created_at)}</td>
                                             <td>

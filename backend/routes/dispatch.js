@@ -23,9 +23,20 @@ router.post("/", authenticate, async (req, res) => {
   try {
     const { customer_name, brand_id, brand_name, size_id, size_name, quantity, notes, dispatch_date, purchase_order_id } = req.body;
 
+    // Resolve PO: use explicit link or auto-match by brand+size
+    let resolvedPoId = purchase_order_id || null;
+    if (!resolvedPoId && brand_id && size_id) {
+      const matchingPo = await PurchaseOrder.findOne({
+        brand_id,
+        size_id,
+        $expr: { $gt: [{ $subtract: ["$quantity", { $ifNull: ["$quantity_dispatched", 0] }] }, 0] }
+      }).sort({ date: 1 }).lean();
+      if (matchingPo) resolvedPoId = matchingPo.id;
+    }
+
     // Validate PO capacity if linked
-    if (purchase_order_id) {
-      const po = await PurchaseOrder.findOne({ id: purchase_order_id }).lean();
+    if (resolvedPoId) {
+      const po = await PurchaseOrder.findOne({ id: resolvedPoId }).lean();
       if (!po) return res.status(404).json({ detail: "Purchase order not found" });
       const remaining = po.quantity - (po.quantity_dispatched || 0);
       if (quantity > remaining) {
@@ -46,16 +57,16 @@ router.post("/", authenticate, async (req, res) => {
       size_id,
       size_name,
       quantity,
-      purchase_order_id: purchase_order_id || null,
+      purchase_order_id: resolvedPoId,
       notes: notes || null,
       dispatch_date: now,
       created_by: req.user.username,
     });
 
     // Sync PO dispatched quantity
-    if (purchase_order_id) {
+    if (resolvedPoId) {
       await PurchaseOrder.updateOne(
-        { id: purchase_order_id },
+        { id: resolvedPoId },
         { $inc: { quantity_dispatched: quantity } }
       );
     }

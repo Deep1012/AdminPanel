@@ -110,7 +110,7 @@ const Dispatch = () => {
             if (editingId) { await dispatchAPI.update(editingId, payload); toast.success('Dispatch updated'); }
             else { await dispatchAPI.create(payload); toast.success('Dispatch created'); }
             setDialogOpen(false); fetchData();
-        } catch (err) { toast.error('Failed to save dispatch'); }
+        } catch (err) { toast.error(err.response?.data?.detail || 'Failed to save dispatch'); }
         finally { setSubmitting(false); }
     };
 

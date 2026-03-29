@@ -35,7 +35,7 @@ router.post("/", authenticate, async (req, res) => {
       name => name.toUpperCase() === brand_name?.toUpperCase()
     );
     if (!isExcludedBrand) {
-      // Cascade to BOTTOM, TOP, LID
+      // Cascade to BOTTOM, TOP, LID for all non-excluded brands
       const cascadingBrands = await Brand.find(
         { name: { $in: CASCADING_BRAND_NAMES } },
         { _id: 0, __v: 0 }
@@ -57,26 +57,29 @@ router.post("/", authenticate, async (req, res) => {
         await Production.insertMany(cascadingDocs);
       }
 
-      // Also cascade to BOTTOM LWBF, LID LWBF
-      const lwbfBrands = await Brand.find(
-        { name: { $in: LWBF_CASCADING_BRAND_NAMES } },
-        { _id: 0, __v: 0 }
-      ).lean();
+      // Cascade to BOTTOM LWBF, LID LWBF only for LWBF-flagged brands
+      const sourceBrand = await Brand.findOne({ id: brand_id }).lean();
+      if (sourceBrand && sourceBrand.is_lwbf) {
+        const lwbfBrands = await Brand.find(
+          { name: { $in: LWBF_CASCADING_BRAND_NAMES } },
+          { _id: 0, __v: 0 }
+        ).lean();
 
-      if (lwbfBrands.length > 0) {
-        const lwbfDocs = lwbfBrands.map(cb => ({
-          id: uuidv4(),
-          brand_id: cb.id,
-          brand_name: cb.name,
-          size_id,
-          size_name,
-          quantity_produced,
-          printing_stock_used: printing_stock_used || quantity_produced,
-          notes: `Auto-created from ${brand_name} production (LWBF)`,
-          production_date: now,
-          created_by: req.user.username,
-        }));
-        await Production.insertMany(lwbfDocs);
+        if (lwbfBrands.length > 0) {
+          const lwbfDocs = lwbfBrands.map(cb => ({
+            id: uuidv4(),
+            brand_id: cb.id,
+            brand_name: cb.name,
+            size_id,
+            size_name,
+            quantity_produced,
+            printing_stock_used: printing_stock_used || quantity_produced,
+            notes: `Auto-created from ${brand_name} production (LWBF)`,
+            production_date: now,
+            created_by: req.user.username,
+          }));
+          await Production.insertMany(lwbfDocs);
+        }
       }
     }
 

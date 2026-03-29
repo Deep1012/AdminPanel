@@ -28,9 +28,12 @@ router.get("/", authenticate, async (req, res) => {
 
 router.put("/:brandId", authenticate, adminRequired, async (req, res) => {
   try {
-    const { name } = req.body;
-    if (!name) return res.status(400).json({ detail: "Name is required" });
-    const result = await Brand.updateOne({ id: req.params.brandId }, { $set: { name } });
+    const { name, is_lwbf } = req.body;
+    const updateData = {};
+    if (name !== undefined) updateData.name = name;
+    if (is_lwbf !== undefined) updateData.is_lwbf = is_lwbf;
+    if (Object.keys(updateData).length === 0) return res.status(400).json({ detail: "No fields to update" });
+    const result = await Brand.updateOne({ id: req.params.brandId }, { $set: updateData });
     if (result.matchedCount === 0) return res.status(404).json({ detail: "Brand not found" });
     res.json({ message: "Brand updated successfully" });
   } catch (error) {
