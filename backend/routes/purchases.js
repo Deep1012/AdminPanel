@@ -1,0 +1,98 @@
+const express = require("express");
+const { v4: uuidv4 } = require("uuid");
+const Purchase = require("../models/Purchase");
+const { authenticate } = require("../middleware/auth");
+
+const router = express.Router();
+
+router.post("/", authenticate, async (req, res) => {
+  try {
+    const { sr_no, gauge, size1, size2, temper, weight, supplier, invoice_number } = req.body;
+    const id = uuidv4();
+    const now = new Date().toISOString();
+
+    // Calculate No of Sheets: WEIGHT / (GAUGE * SIZE1 * SIZE2 / 100000 * 0.785)
+    const divisor = (gauge * size1 * size2 / 100000) * 0.785;
+    const no_of_sheets = divisor > 0 ? Math.floor(weight / divisor) : 0;
+
+    const purchase = await Purchase.create({
+      id,
+      sr_no,
+      gauge,
+      size1,
+      size2,
+      temper,
+      weight,
+      no_of_sheets,
+      sheets_used: 0,
+      sheets_available: no_of_sheets,
+      supplier: supplier || null,
+      invoice_number: invoice_number || null,
+      purchase_date: now,
+      created_by: req.user.username,
+    });
+
+    res.json(purchase.toObject({ versionKey: false }));
+  } catch (error) {
+    res.status(500).json({ detail: error.message });
+  }
+});
+
+router.get("/", authenticate, async (req, res) => {
+  try {
+    const purchases = await Purchase.find({}, { _id: 0, __v: 0 }).sort({ purchase_date: -1 });
+    const result = purchases.map((p) => {
+      const obj = p.toObject();
+      if (obj.sheets_used === undefined) obj.sheets_used = 0;
+      if (obj.sheets_available === undefined) {
+        obj.sheets_available = (obj.no_of_sheets || 0) - (obj.sheets_used || 0);
+      }
+      return obj;
+    });
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ detail: error.message });
+  }
+});
+
+router.get("/available", authenticate, async (req, res) => {
+  try {
+    const purchases = await Purchase.find({}, { _id: 0, __v: 0 }).sort({ purchase_date: -1 });
+    const available = [];
+    for (const p of purchases) {
+      const sheets_used = p.sheets_used || 0;
+      const sheets_available = (p.no_of_sheets || 0) - sheets_used;
+      if (sheets_available > 0) {
+        available.push({
+          id: p.id,
+          sr_no: p.sr_no,
+          gauge: p.gauge,
+          size1: p.size1,
+          size2: p.size2,
+          temper: p.temper,
+          no_of_sheets: p.no_of_sheets,
+          sheets_used,
+          sheets_available,
+          display_name: `${p.sr_no} - ${p.size1}x${p.size2} (${sheets_available} sheets)`,
+        });
+      }
+    }
+    res.json(available);
+  } catch (error) {
+    res.status(500).json({ detail: error.message });
+  }
+});
+
+router.delete("/:purchaseId", authenticate, async (req, res) => {
+  try {
+    const result = await Purchase.deleteOne({ id: req.params.purchaseId });
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ detail: "Purchase not found" });
+    }
+    res.json({ message: "Purchase deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ detail: error.message });
+  }
+});
+
+module.exports = router;

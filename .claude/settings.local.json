@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(npx expo:*)",
+      "Bash(node:*)",
+      "Bash(timeout 15 npm run dev)",
+      "Bash(./gradlew --stop)",
+      "Bash(taskkill //F //IM java.exe)",
+      "Bash(./gradlew :app:processDebugMainManifest)",
+      "Bash(./gradlew clean)",
+      "Bash(tee build.log)",
+      "Bash(curl:*)",
+      "Bash(./gradlew.bat app:processDebugMainManifest:*)",
+      "Bash(xargs cat:*)",
+      "Bash(wc:*)",
+      "Bash(xargs grep:*)",
+      "Bash(cd:*)",
+      "Bash(claude mcp:*)",
+      "Bash(find c:/Barodaweb/ElevatePhase2/ElevateApp -name *aypal* -type f)",
+      "Bash(find c:/Barodaweb/ElevatePhase2/ElevateApp/src/screen-groups -name *ayment* -o -name *aypal*)",
+      "WebSearch"
+    ]
+  }
+}
