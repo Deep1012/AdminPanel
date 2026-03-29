@@ -495,7 +495,3 @@ Finished Goods Available = 400 - (dispatched quantity)
 ```
 
 ---
-
-## Support
-
-For technical support or issues with the CRM panel, contact your system administrator.
