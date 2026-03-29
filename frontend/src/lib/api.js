@@ -95,6 +95,19 @@ export const customersAPI = {
     delete: (id) => api.delete(`/customers/${id}`),
 };
 
+export const adminAPI = {
+    clearOperationalData: () => api.post('/admin/clear-operational-data'),
+};
+
+export const menuItemsAPI = {
+    getAll: () => api.get('/menu-items'),
+    create: (data) => api.post('/menu-items', data),
+    update: (id, data) => api.put(`/menu-items/${id}`, data),
+    delete: (id) => api.delete(`/menu-items/${id}`),
+    reorder: (items) => api.put('/menu-items', { items }),
+    seedDefaults: () => api.post('/menu-items/seed-defaults'),
+};
+
 export const dashboardAPI = {
     getStats: () => api.get('/dashboard/stats'),
     getPurchaseStock: () => api.get('/dashboard/purchase-stock'),

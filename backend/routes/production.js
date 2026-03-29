@@ -5,6 +5,8 @@ const Brand = require("../models/Brand");
 const { authenticate } = require("../middleware/auth");
 
 const CASCADING_BRAND_NAMES = ["BOTTOM", "TOP", "LID"];
+const LWBF_CASCADING_BRAND_NAMES = ["BOTTOM LWBF", "LID LWBF"];
+const ALL_EXCLUDED_BRANDS = [...CASCADING_BRAND_NAMES, ...LWBF_CASCADING_BRAND_NAMES];
 
 const router = express.Router();
 
@@ -28,9 +30,12 @@ router.post("/", authenticate, async (req, res) => {
       created_by: req.user.username,
     });
 
-    // Cascading BOTTOM/TOP/LID logic
-    const isCascadingBrand = CASCADING_BRAND_NAMES.includes(brand_name?.toUpperCase());
-    if (!isCascadingBrand) {
+    // Cascading BOTTOM/TOP/LID + LWBF logic
+    const isExcludedBrand = ALL_EXCLUDED_BRANDS.some(
+      name => name.toUpperCase() === brand_name?.toUpperCase()
+    );
+    if (!isExcludedBrand) {
+      // Cascade to BOTTOM, TOP, LID
       const cascadingBrands = await Brand.find(
         { name: { $in: CASCADING_BRAND_NAMES } },
         { _id: 0, __v: 0 }
@@ -50,6 +55,28 @@ router.post("/", authenticate, async (req, res) => {
           created_by: req.user.username,
         }));
         await Production.insertMany(cascadingDocs);
+      }
+
+      // Also cascade to BOTTOM LWBF, LID LWBF
+      const lwbfBrands = await Brand.find(
+        { name: { $in: LWBF_CASCADING_BRAND_NAMES } },
+        { _id: 0, __v: 0 }
+      ).lean();
+
+      if (lwbfBrands.length > 0) {
+        const lwbfDocs = lwbfBrands.map(cb => ({
+          id: uuidv4(),
+          brand_id: cb.id,
+          brand_name: cb.name,
+          size_id,
+          size_name,
+          quantity_produced,
+          printing_stock_used: printing_stock_used || quantity_produced,
+          notes: `Auto-created from ${brand_name} production (LWBF)`,
+          production_date: now,
+          created_by: req.user.username,
+        }));
+        await Production.insertMany(lwbfDocs);
       }
     }
 

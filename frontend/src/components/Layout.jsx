@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useSidebar } from '../hooks/useSidebar';
+import { menuItemsAPI } from '../lib/api';
+import { getIcon } from '../lib/iconMap';
 import { Button } from './ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 import { Avatar, AvatarFallback } from './ui/avatar';
@@ -10,41 +12,27 @@ import {
     DropdownMenuSeparator, DropdownMenuTrigger
 } from './ui/dropdown-menu';
 import {
-    LayoutDashboard,
-    ShoppingCart,
-    ClipboardList,
-    Printer,
-    Factory,
-    Truck,
-    Settings,
-    Tag,
-    Ruler,
-    LogOut,
-    Menu,
-    X,
-    Package,
-    User,
-    Users,
-    Layers,
-    ChevronLeft,
-    ChevronRight,
-    ChevronDown
+    LayoutDashboard, ShoppingCart, ClipboardList, Printer, Factory, Truck,
+    Settings, Tag, Ruler, LogOut, Menu, X, Package, User, Users, Layers,
+    ChevronLeft, ChevronRight, ChevronDown
 } from 'lucide-react';
 
-const navItems = [
-    { path: '/dashboard', label: 'DASHBOARD', icon: LayoutDashboard },
-    { path: '/raw-material-stock', label: 'RAW MATERIAL STOCK', icon: Layers },
-    { path: '/printing-stock', label: 'PRINTING STOCK', icon: Printer },
-    { path: '/finished-goods', label: 'FINISHED GOODS', icon: Package },
-    { path: '/purchase-orders', label: 'PURCHASE ORDERS', icon: ClipboardList },
-    { path: '/purchase', label: 'PURCHASE', icon: ShoppingCart },
-    { path: '/printing', label: 'PRINTING/COATING', icon: Printer },
-    { path: '/production', label: 'PRODUCTION', icon: Factory },
-    { path: '/dispatch', label: 'DISPATCH', icon: Truck },
-    { path: '/customers', label: 'CUSTOMERS', icon: Users, adminOnly: true },
-    { path: '/brands', label: 'BRANDS', icon: Tag, adminOnly: true },
-    { path: '/sizes', label: 'SIZES', icon: Ruler, adminOnly: true },
-    { path: '/admin', label: 'USERS', icon: Settings, adminOnly: true },
+// Fallback if API fails or menu items not yet seeded
+const FALLBACK_NAV_ITEMS = [
+    { path: '/dashboard', label: 'DASHBOARD', icon: 'LayoutDashboard' },
+    { path: '/raw-material-stock', label: 'RAW MATERIAL STOCK', icon: 'Layers' },
+    { path: '/printing-stock', label: 'PRINTING STOCK', icon: 'Printer' },
+    { path: '/finished-goods', label: 'FINISHED GOODS', icon: 'Package' },
+    { path: '/purchase-orders', label: 'PURCHASE ORDERS', icon: 'ClipboardList' },
+    { path: '/purchase', label: 'PURCHASE', icon: 'ShoppingCart' },
+    { path: '/printing', label: 'PRINTING/COATING', icon: 'Printer' },
+    { path: '/production', label: 'PRODUCTION', icon: 'Factory' },
+    { path: '/dispatch', label: 'DISPATCH', icon: 'Truck' },
+    { path: '/customers', label: 'CUSTOMERS', icon: 'Users', admin_only: true },
+    { path: '/brands', label: 'BRANDS', icon: 'Tag', admin_only: true },
+    { path: '/sizes', label: 'SIZES', icon: 'Ruler', admin_only: true },
+    { path: '/menu-management', label: 'MENU MANAGEMENT', icon: 'Menu', admin_only: true },
+    { path: '/admin', label: 'USERS', icon: 'Settings', admin_only: true },
 ];
 
 export const Layout = ({ children }) => {
@@ -53,13 +41,26 @@ export const Layout = ({ children }) => {
     const navigate = useNavigate();
     const { isCollapsed, toggleSidebar } = useSidebar();
     const [mobileOpen, setMobileOpen] = useState(false);
+    const [navItems, setNavItems] = useState([]);
+
+    useEffect(() => {
+        menuItemsAPI.getAll()
+            .then(res => {
+                if (res.data && res.data.length > 0) {
+                    setNavItems(res.data);
+                } else {
+                    setNavItems(FALLBACK_NAV_ITEMS);
+                }
+            })
+            .catch(() => setNavItems(FALLBACK_NAV_ITEMS));
+    }, []);
 
     const handleLogout = () => {
         logout();
         navigate('/login');
     };
 
-    const filteredNavItems = navItems.filter(item => !item.adminOnly || isAdmin());
+    const filteredNavItems = navItems.filter(item => !item.admin_only || isAdmin());
 
     return (
         <div className="min-h-screen bg-background flex" data-testid="main-layout">
@@ -105,7 +106,7 @@ export const Layout = ({ children }) => {
                     <TooltipProvider delayDuration={0}>
                         <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
                             {filteredNavItems.map((item) => {
-                                const Icon = item.icon;
+                                const Icon = getIcon(item.icon);
                                 const isActive = location.pathname === item.path;
 
                                 const navLink = (

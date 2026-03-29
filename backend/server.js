@@ -14,6 +14,8 @@ const dispatchRoutes = require("./routes/dispatch");
 const dashboardRoutes = require("./routes/dashboard");
 const purchaseOrderRoutes = require("./routes/purchaseOrders");
 const customerRoutes = require("./routes/customers");
+const adminRoutes = require("./routes/admin");
+const menuItemRoutes = require("./routes/menuItems");
 
 const app = express();
 const PORT = process.env.PORT || 8001;
@@ -37,6 +39,8 @@ app.use("/api/dispatch", dispatchRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/purchase-orders", purchaseOrderRoutes);
 app.use("/api/customers", customerRoutes);
+app.use("/api/admin", adminRoutes);
+app.use("/api/menu-items", menuItemRoutes);
 
 // Health check
 app.get("/api", (req, res) => {

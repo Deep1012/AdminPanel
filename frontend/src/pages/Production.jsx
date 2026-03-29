@@ -228,10 +228,11 @@ const Production = () => {
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="data-table" data-testid="production-table">
-                                <thead><tr><th>Date</th><th>Size</th><th>Brand</th><th>Printing Used</th><th>Qty Produced</th><th>Notes</th><th>By</th><th></th></tr></thead>
+                                <thead><tr><th>#</th><th>Date</th><th>Size</th><th>Brand</th><th>Printing Used</th><th>Qty Produced</th><th>Notes</th><th>By</th><th></th></tr></thead>
                                 <tbody>
-                                    {paginatedProduction.map((entry) => (
+                                    {paginatedProduction.map((entry, idx) => (
                                         <tr key={entry.id} data-testid={`production-row-${entry.id}`}>
+                                            <td className="text-muted-foreground">{startIndex + idx + 1}</td>
                                             <td>{formatDate(entry.production_date)}</td>
                                             <td className="font-medium">{entry.size_name}</td>
                                             <td>{entry.brand_name}</td>

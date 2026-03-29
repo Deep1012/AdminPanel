@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
+import TableSearch from '../components/TableSearch';
+import TablePagination from '../components/TablePagination';
+import { useTableFilter } from '../hooks/useTableFilter';
+import { usePagination } from '../hooks/usePagination';
 import { dashboardAPI } from '../lib/api';
 import { formatNumber } from '../lib/utils';
 import { Loader2, AlertCircle, Download, Layers } from 'lucide-react';
@@ -19,6 +23,13 @@ const EXPORT_COLUMNS = [
 const RawMaterialStock = () => {
     const [stockData, setStockData] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [searchTerm, setSearchTerm] = useState('');
+
+    const filteredData = useTableFilter({
+        data: stockData, searchTerm, searchFields: ['size', 'gauge'], filters: []
+    });
+
+    const { paginatedData, currentPage, totalPages, pageSize, setCurrentPage, setPageSize, startIndex, PAGE_SIZE_OPTIONS } = usePagination({ data: filteredData });
 
     useEffect(() => { fetchData(); }, []);
 
@@ -49,18 +60,27 @@ const RawMaterialStock = () => {
                         <Layers className="w-5 h-5 text-primary" /> Raw Material Stock (Size-Wise)
                     </CardTitle>
                 </CardHeader>
+                <TableSearch
+                    searchValue={searchTerm}
+                    onSearchChange={setSearchTerm}
+                    searchPlaceholder="Search by size, gauge..."
+                    onClear={() => setSearchTerm('')}
+                    resultCount={filteredData.length}
+                    totalCount={stockData.length}
+                />
                 <CardContent className="p-0">
                     {loading ? (
                         <div className="flex items-center justify-center h-48"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
-                    ) : stockData.length === 0 ? (
+                    ) : filteredData.length === 0 ? (
                         <div className="flex flex-col items-center justify-center h-48 text-muted-foreground"><AlertCircle className="w-8 h-8 mb-2" /><p>No stock data available</p></div>
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="data-table" data-testid="raw-material-stock-table">
-                                <thead><tr><th>Size</th><th>Gauge</th><th>Total Sheets</th><th>Used</th><th>Available</th><th>Weight (KG)</th></tr></thead>
+                                <thead><tr><th>#</th><th>Size</th><th>Gauge</th><th>Total Sheets</th><th>Used</th><th>Available</th><th>Weight (KG)</th></tr></thead>
                                 <tbody>
-                                    {stockData.map((row, idx) => (
+                                    {paginatedData.map((row, idx) => (
                                         <tr key={idx}>
+                                            <td className="text-muted-foreground">{startIndex + idx + 1}</td>
                                             <td className="font-medium">{row.size}</td>
                                             <td>{row.gauge}</td>
                                             <td className="font-mono">{formatNumber(row.total_sheets)}</td>
@@ -73,6 +93,7 @@ const RawMaterialStock = () => {
                             </table>
                         </div>
                     )}
+                    <TablePagination currentPage={currentPage} totalPages={totalPages} pageSize={pageSize} totalItems={filteredData.length} startIndex={startIndex} onPageChange={setCurrentPage} onPageSizeChange={setPageSize} pageSizeOptions={PAGE_SIZE_OPTIONS} />
                 </CardContent>
             </Card>
         </div>

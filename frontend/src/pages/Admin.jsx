@@ -12,9 +12,9 @@ import TableSearch from '../components/TableSearch';
 import TablePagination from '../components/TablePagination';
 import { useTableFilter } from '../hooks/useTableFilter';
 import { usePagination } from '../hooks/usePagination';
-import { usersAPI, authAPI } from '../lib/api';
+import { usersAPI, authAPI, adminAPI } from '../lib/api';
 import { formatDate } from '../lib/utils';
-import { Trash2, Pencil, Loader2, AlertCircle, Lock, Unlock, UserPlus, Download } from 'lucide-react';
+import { Trash2, Pencil, Loader2, AlertCircle, Lock, Unlock, UserPlus, Download, DatabaseZap } from 'lucide-react';
 import { toast } from 'sonner';
 import { exportToExcel } from '../lib/exportToExcel';
 
@@ -36,6 +36,8 @@ const Admin = () => {
     const [editingId, setEditingId] = useState(null);
     const [formData, setFormData] = useState({ ...emptyUser });
     const [deleteTarget, setDeleteTarget] = useState(null);
+    const [clearDataOpen, setClearDataOpen] = useState(false);
+    const [clearing, setClearing] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
 
     const filteredUsers = useTableFilter({
@@ -91,6 +93,17 @@ const Admin = () => {
         finally { setDeleteTarget(null); }
     };
 
+    const handleClearData = async () => {
+        setClearing(true);
+        try {
+            const res = await adminAPI.clearOperationalData();
+            const d = res.data.deleted;
+            toast.success(`Cleared: ${d.purchases} purchases, ${d.printingJobs} jobs, ${d.production} production, ${d.dispatches} dispatches, ${d.purchaseOrders} POs`);
+            setClearDataOpen(false);
+        } catch (err) { toast.error(err.response?.data?.detail || 'Failed to clear data'); }
+        finally { setClearing(false); }
+    };
+
     if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
 
     return (
@@ -98,6 +111,9 @@ const Admin = () => {
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <p className="text-muted-foreground">Manage system users and access control</p>
                 <div className="flex gap-2">
+                    <Button variant="destructive" onClick={() => setClearDataOpen(true)} className="font-bold uppercase tracking-wider rounded-sm" data-testid="clear-data-btn">
+                        <DatabaseZap className="w-4 h-4 mr-2" /> Clear Data
+                    </Button>
                     <Button variant="outline" onClick={() => {
                         const data = filteredUsers.length > 0 ? filteredUsers : users;
                         if (exportToExcel({ data, columns: USERS_EXPORT_COLUMNS, fileName: 'Users', sheetName: 'Users' })) toast.success('Exported to Excel');
@@ -158,6 +174,7 @@ const Admin = () => {
             </Dialog>
 
             <ConfirmDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)} title="Delete User?" description="This will permanently remove this user account." onConfirm={handleDelete} />
+            <ConfirmDialog open={clearDataOpen} onOpenChange={setClearDataOpen} title="Clear ALL Operational Data?" description="This will permanently delete ALL purchases, printing jobs, production records, dispatches, and purchase orders. Brands, sizes, customers, and users will NOT be affected. This action cannot be undone." onConfirm={handleClearData} confirmText={clearing ? 'Clearing...' : 'Clear All Data'} />
 
             <Card className="industrial-card">
                 <CardHeader className="flex flex-row items-center justify-between">
@@ -178,10 +195,11 @@ const Admin = () => {
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="data-table" data-testid="users-table">
-                                <thead><tr><th>Username</th><th>Email</th><th>Role</th><th>Created</th><th>Locked</th><th></th></tr></thead>
+                                <thead><tr><th>#</th><th>Username</th><th>Email</th><th>Role</th><th>Created</th><th>Locked</th><th></th></tr></thead>
                                 <tbody>
-                                    {paginatedUsers.map((user) => (
+                                    {paginatedUsers.map((user, idx) => (
                                         <tr key={user.id} data-testid={`user-row-${user.id}`}>
+                                            <td className="text-muted-foreground">{startIndex + idx + 1}</td>
                                             <td className="font-medium">{user.username}</td>
                                             <td className="font-mono text-muted-foreground">{user.email}</td>
                                             <td><Badge variant={user.role === 'admin' ? 'default' : 'secondary'} className="uppercase">{user.role}</Badge></td>

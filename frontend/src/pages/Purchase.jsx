@@ -235,10 +235,11 @@ const Purchase = () => {
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="data-table" data-testid="purchase-table">
-                                <thead><tr><th>Date</th><th>Sr. No</th><th>Gauge</th><th>Size 1</th><th>Size 2</th><th>Temper</th><th>Weight</th><th>Total Sheets</th><th>Used</th><th>Available</th><th>Supplier</th><th>By</th><th></th></tr></thead>
+                                <thead><tr><th>#</th><th>Date</th><th>Sr. No</th><th>Gauge</th><th>Size 1</th><th>Size 2</th><th>Temper</th><th>Weight</th><th>Total Sheets</th><th>Used</th><th>Available</th><th>Supplier</th><th>By</th><th></th></tr></thead>
                                 <tbody>
-                                    {paginatedPurchases.map((p) => (
+                                    {paginatedPurchases.map((p, idx) => (
                                         <tr key={p.id} data-testid={`purchase-row-${p.id}`}>
+                                            <td className="text-muted-foreground">{startIndex + idx + 1}</td>
                                             <td>{formatDate(p.purchase_date)}</td>
                                             <td className="font-medium">{p.sr_no}</td>
                                             <td>{p.gauge}</td><td>{p.size1}</td><td>{p.size2}</td><td>{p.temper}</td>

@@ -11,7 +11,7 @@ import TableSearch from '../components/TableSearch';
 import TablePagination from '../components/TablePagination';
 import { useTableFilter } from '../hooks/useTableFilter';
 import { usePagination } from '../hooks/usePagination';
-import { dispatchAPI, brandsAPI, sizesAPI, customersAPI } from '../lib/api';
+import { dispatchAPI, brandsAPI, sizesAPI, customersAPI, purchaseOrdersAPI } from '../lib/api';
 import SearchableSelect from '../components/SearchableSelect';
 import { formatDate, formatNumber } from '../lib/utils';
 import { Plus, Trash2, Pencil, Truck, Loader2, AlertCircle, Download } from 'lucide-react';
@@ -30,7 +30,8 @@ const DISPATCH_EXPORT_COLUMNS = [
 
 const emptyForm = {
     customer_name: '', brand_id: '', size_id: '', quantity: '',
-    notes: '', dispatch_date: new Date().toISOString().split('T')[0]
+    notes: '', dispatch_date: new Date().toISOString().split('T')[0],
+    purchase_order_id: ''
 };
 
 const Dispatch = () => {
@@ -38,6 +39,7 @@ const Dispatch = () => {
     const [brands, setBrands] = useState([]);
     const [sizes, setSizes] = useState([]);
     const [customers, setCustomers] = useState([]);
+    const [purchaseOrders, setPurchaseOrders] = useState([]);
     const [loading, setLoading] = useState(true);
     const [dialogOpen, setDialogOpen] = useState(false);
     const [submitting, setSubmitting] = useState(false);
@@ -65,10 +67,10 @@ const Dispatch = () => {
     const fetchData = async () => {
         try {
             setLoading(true);
-            const [dispatchRes, brandsRes, sizesRes, customersRes] = await Promise.all([
-                dispatchAPI.getAll(), brandsAPI.getAll(), sizesAPI.getAll(), customersAPI.getAll()
+            const [dispatchRes, brandsRes, sizesRes, customersRes, poRes] = await Promise.all([
+                dispatchAPI.getAll(), brandsAPI.getAll(), sizesAPI.getAll(), customersAPI.getAll(), purchaseOrdersAPI.getAll()
             ]);
-            setDispatches(dispatchRes.data); setBrands(brandsRes.data); setSizes(sizesRes.data); setCustomers(customersRes.data);
+            setDispatches(dispatchRes.data); setBrands(brandsRes.data); setSizes(sizesRes.data); setCustomers(customersRes.data); setPurchaseOrders(poRes.data);
         } catch (err) { toast.error('Failed to load data'); }
         finally { setLoading(false); }
     };
@@ -82,6 +84,7 @@ const Dispatch = () => {
             quantity: String(d.quantity),
             notes: d.notes || '',
             dispatch_date: d.dispatch_date ? d.dispatch_date.split('T')[0] : new Date().toISOString().split('T')[0],
+            purchase_order_id: d.purchase_order_id || '',
         });
         setDialogOpen(true);
     };
@@ -102,6 +105,7 @@ const Dispatch = () => {
                 quantity: parseInt(formData.quantity),
                 notes: formData.notes || null,
                 dispatch_date: new Date(formData.dispatch_date).toISOString(),
+                purchase_order_id: formData.purchase_order_id || null,
             };
             if (editingId) { await dispatchAPI.update(editingId, payload); toast.success('Dispatch updated'); }
             else { await dispatchAPI.create(payload); toast.success('Dispatch created'); }
@@ -183,6 +187,28 @@ const Dispatch = () => {
                             </div>
                         </div>
                         <div className="space-y-2">
+                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Link to Purchase Order</Label>
+                            <Select value={formData.purchase_order_id} onValueChange={(v) => setFormData({ ...formData, purchase_order_id: v === 'none' ? '' : v })}>
+                                <SelectTrigger className="bg-background border-input rounded-sm" data-testid="dispatch-po"><SelectValue placeholder="None (optional)" /></SelectTrigger>
+                                <SelectContent className="bg-card border-border rounded-sm max-h-60">
+                                    <SelectItem value="none">None</SelectItem>
+                                    {purchaseOrders
+                                        .filter(po => {
+                                            if (!formData.brand_id && !formData.size_id) return true;
+                                            const matchBrand = !formData.brand_id || po.brand_id === formData.brand_id;
+                                            const matchSize = !formData.size_id || po.size_id === formData.size_id;
+                                            return matchBrand && matchSize;
+                                        })
+                                        .map(po => (
+                                            <SelectItem key={po.id} value={po.id}>
+                                                {po.serial_no} — {po.company_name} ({po.brand_name} {po.size_name}) [{po.quantity_dispatched || 0}/{po.quantity}]
+                                            </SelectItem>
+                                        ))
+                                    }
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2">
                             <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Notes</Label>
                             <Input value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} placeholder="Optional notes..." className="bg-background border-input rounded-sm" data-testid="dispatch-notes" />
                         </div>
@@ -222,16 +248,18 @@ const Dispatch = () => {
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="data-table" data-testid="dispatch-table">
-                                <thead><tr><th>Date</th><th>Order #</th><th>Customer</th><th>Brand</th><th>Size</th><th>Qty</th><th>By</th><th></th></tr></thead>
+                                <thead><tr><th>#</th><th>Date</th><th>Order #</th><th>Customer</th><th>Brand</th><th>Size</th><th>Qty</th><th>PO</th><th>By</th><th></th></tr></thead>
                                 <tbody>
-                                    {paginatedDispatches.map((d) => (
+                                    {paginatedDispatches.map((d, idx) => (
                                         <tr key={d.id} data-testid={`dispatch-row-${d.id}`}>
+                                            <td className="text-muted-foreground">{startIndex + idx + 1}</td>
                                             <td>{formatDate(d.dispatch_date)}</td>
                                             <td className="font-mono font-medium">{d.order_number}</td>
                                             <td className="font-medium">{d.customer_name}</td>
                                             <td>{d.brand_name}</td>
                                             <td><Badge variant="outline">{d.size_name}</Badge></td>
                                             <td className="font-mono">{formatNumber(d.quantity)}</td>
+                                            <td className="font-mono text-xs">{d.purchase_order_id ? purchaseOrders.find(po => po.id === d.purchase_order_id)?.serial_no || '-' : '-'}</td>
                                             <td className="text-muted-foreground">{d.created_by}</td>
                                             <td>
                                                 <div className="flex gap-1">

@@ -303,10 +303,11 @@ const Printing = () => {
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="data-table" data-testid="jobs-table">
-                                <thead><tr><th>Date</th><th>Job #</th><th>Raw Material</th><th>Material Size</th><th>Sheets</th><th>Size</th><th>Brand</th><th>Bodies</th><th>Total Printing</th><th>By</th><th></th></tr></thead>
+                                <thead><tr><th>#</th><th>Date</th><th>Job #</th><th>Raw Material</th><th>Material Size</th><th>Sheets</th><th>Size</th><th>Brand</th><th>Bodies</th><th>Total Printing</th><th>By</th><th></th></tr></thead>
                                 <tbody>
-                                    {paginatedJobs.map((row) => (
+                                    {paginatedJobs.map((row, idx) => (
                                         <tr key={row._rowKey} data-testid={`job-row-${row._rowKey}`}>
+                                            <td className="text-muted-foreground">{startIndex + idx + 1}</td>
                                             <td>{formatDate(row.job_date)}</td>
                                             <td className="font-medium">{row.job_number}</td>
                                             <td>{row.raw_material_sr_no}</td>

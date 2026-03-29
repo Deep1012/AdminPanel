@@ -9,6 +9,7 @@ const dispatchSchema = new mongoose.Schema({
   size_id: { type: String, required: true },
   size_name: { type: String, required: true },
   quantity: { type: Number, required: true },
+  purchase_order_id: { type: String, default: null },
   notes: { type: String, default: null },
   dispatch_date: { type: String, required: true },
   created_by: { type: String, required: true },
