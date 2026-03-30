@@ -63,7 +63,6 @@ router.post("/", authenticate, async (req, res) => {
       quantity: parseInt(quantity),
       notes: notes || null,
       quantity_dispatched: 0,
-      dispatch_id: null,
       created_by: req.user.username,
       created_at: now,
     });
@@ -94,9 +93,14 @@ router.put("/:poId", authenticate, async (req, res) => {
     if (brand_name !== undefined) updateData.brand_name = brand_name;
     if (size_id !== undefined) updateData.size_id = size_id;
     if (size_name !== undefined) updateData.size_name = size_name;
-    if (quantity !== undefined) updateData.quantity = parseInt(quantity);
+    if (quantity !== undefined) {
+      const newQty = parseInt(quantity);
+      if (newQty < (existingPO.quantity_dispatched || 0)) {
+        return res.status(400).json({ detail: `Cannot reduce quantity below dispatched amount (${existingPO.quantity_dispatched || 0})` });
+      }
+      updateData.quantity = newQty;
+    }
     if (notes !== undefined) updateData.notes = notes;
-    if (req.body.quantity_dispatched !== undefined) updateData.quantity_dispatched = req.body.quantity_dispatched;
 
     if (Object.keys(updateData).length === 0) {
       return res.status(400).json({ detail: "No fields to update" });
@@ -113,10 +117,16 @@ router.put("/:poId", authenticate, async (req, res) => {
 // DELETE purchase order
 router.delete("/:poId", authenticate, async (req, res) => {
   try {
-    const result = await PurchaseOrder.deleteOne({ id: req.params.poId });
-    if (result.deletedCount === 0) {
-      return res.status(404).json({ detail: "Purchase order not found" });
-    }
+    const po = await PurchaseOrder.findOne({ id: req.params.poId }).lean();
+    if (!po) return res.status(404).json({ detail: "Purchase order not found" });
+
+    // Unlink any dispatches referencing this PO
+    await Dispatch.updateMany(
+      { purchase_order_id: req.params.poId },
+      { $set: { purchase_order_id: null } }
+    );
+
+    await PurchaseOrder.deleteOne({ id: req.params.poId });
     res.json({ message: "Purchase order deleted successfully" });
   } catch (error) {
     res.status(500).json({ detail: error.message });

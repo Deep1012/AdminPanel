@@ -12,6 +12,8 @@ import TablePagination from '../components/TablePagination';
 import { useTableFilter } from '../hooks/useTableFilter';
 import { usePagination } from '../hooks/usePagination';
 import { productionAPI, brandsAPI, sizesAPI, dashboardAPI } from '../lib/api';
+
+const EXCLUDED_BRAND_NAMES = ['BOTTOM', 'TOP', 'LID', 'BOTTOM LWBF', 'LID LWBF'];
 import { formatDate, formatNumber } from '../lib/utils';
 import { Plus, Trash2, Pencil, Factory, Loader2, AlertCircle, Download } from 'lucide-react';
 import { toast } from 'sonner';
@@ -127,8 +129,7 @@ const Production = () => {
                 <p className="text-muted-foreground">Record finished goods production</p>
                 <div className="flex gap-2">
                     <Button variant="outline" onClick={() => {
-                        const data = filteredProduction.length > 0 ? filteredProduction : production;
-                        if (exportToExcel({ data, columns: PRODUCTION_EXPORT_COLUMNS, fileName: 'Production', sheetName: 'Production' })) toast.success('Exported to Excel');
+                        if (exportToExcel({ data: filteredProduction, columns: PRODUCTION_EXPORT_COLUMNS, fileName: 'Production', sheetName: 'Production' })) toast.success('Exported to Excel');
                         else toast.error('No data to export');
                     }} className="font-bold uppercase tracking-wider rounded-sm" data-testid="export-production-btn">
                         <Download className="w-4 h-4 mr-2" /> Export
@@ -162,7 +163,7 @@ const Production = () => {
                             <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Brand *</Label>
                             <Select value={formData.brand_id} onValueChange={(v) => setFormData({ ...formData, brand_id: v })}>
                                 <SelectTrigger className="bg-background border-input rounded-sm" data-testid="prod-brand"><SelectValue placeholder="Select brand" /></SelectTrigger>
-                                <SelectContent className="bg-card border-border rounded-sm max-h-60">{brands.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
+                                <SelectContent className="bg-card border-border rounded-sm max-h-60">{brands.filter(b => !EXCLUDED_BRAND_NAMES.includes(b.name?.toUpperCase())).map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
                             </Select>
                         </div>
                         <div className="space-y-2">

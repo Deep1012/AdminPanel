@@ -9,6 +9,7 @@ const productionSchema = new mongoose.Schema({
   quantity_produced: { type: Number, required: true },
   printing_stock_used: { type: Number, default: 0 },
   printing_job_id: { type: String, default: null },
+  parent_production_id: { type: String, default: null },
   notes: { type: String, default: null },
   production_date: { type: String, required: true },
   created_by: { type: String, required: true },

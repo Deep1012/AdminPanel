@@ -117,10 +117,18 @@ router.put("/:jobId", authenticate, async (req, res) => {
 
 router.delete("/:jobId", authenticate, async (req, res) => {
   try {
-    const result = await PrintingJob.deleteOne({ id: req.params.jobId });
-    if (result.deletedCount === 0) {
-      return res.status(404).json({ detail: "Job not found" });
+    const job = await PrintingJob.findOne({ id: req.params.jobId }).lean();
+    if (!job) return res.status(404).json({ detail: "Job not found" });
+
+    // Roll back sheets_used on the raw material
+    if (job.raw_material_id && job.sheets_from_material) {
+      await Purchase.updateOne(
+        { id: job.raw_material_id },
+        { $inc: { sheets_used: -job.sheets_from_material } }
+      );
     }
+
+    await PrintingJob.deleteOne({ id: req.params.jobId });
     res.json({ message: "Job deleted successfully" });
   } catch (error) {
     res.status(500).json({ detail: error.message });

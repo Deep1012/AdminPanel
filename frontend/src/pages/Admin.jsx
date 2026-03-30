@@ -115,7 +115,7 @@ const Admin = () => {
                         <DatabaseZap className="w-4 h-4 mr-2" /> Clear Data
                     </Button>
                     <Button variant="outline" onClick={() => {
-                        const data = filteredUsers.length > 0 ? filteredUsers : users;
+                        const data = filteredUsers;
                         if (exportToExcel({ data, columns: USERS_EXPORT_COLUMNS, fileName: 'Users', sheetName: 'Users' })) toast.success('Exported to Excel');
                         else toast.error('No data to export');
                     }} className="font-bold uppercase tracking-wider rounded-sm" data-testid="export-users-btn">

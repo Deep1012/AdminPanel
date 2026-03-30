@@ -49,7 +49,8 @@ router.post("/", authenticate, async (req, res) => {
           size_id,
           size_name,
           quantity_produced,
-          printing_stock_used: printing_stock_used || quantity_produced,
+          printing_stock_used: printing_stock_used ?? quantity_produced,
+          parent_production_id: id,
           notes: `Auto-created from ${brand_name} production`,
           production_date: now,
           created_by: req.user.username,
@@ -73,7 +74,8 @@ router.post("/", authenticate, async (req, res) => {
             size_id,
             size_name,
             quantity_produced,
-            printing_stock_used: printing_stock_used || quantity_produced,
+            printing_stock_used: printing_stock_used ?? quantity_produced,
+            parent_production_id: id,
             notes: `Auto-created from ${brand_name} production (LWBF)`,
             production_date: now,
             created_by: req.user.username,
@@ -122,6 +124,20 @@ router.put("/:prodId", authenticate, async (req, res) => {
 
     const result = await Production.updateOne({ id: req.params.prodId }, { $set: updateData });
     if (result.matchedCount === 0) return res.status(404).json({ detail: "Production entry not found" });
+
+    // Also update cascaded entries if quantity/size changed
+    const cascadeUpdate = {};
+    if (quantity_produced !== undefined) {
+      cascadeUpdate.quantity_produced = quantity_produced;
+      cascadeUpdate.printing_stock_used = printing_stock_used ?? quantity_produced;
+    }
+    if (size_id !== undefined) cascadeUpdate.size_id = size_id;
+    if (size_name !== undefined) cascadeUpdate.size_name = size_name;
+    if (production_date !== undefined) cascadeUpdate.production_date = production_date;
+    if (Object.keys(cascadeUpdate).length > 0) {
+      await Production.updateMany({ parent_production_id: req.params.prodId }, { $set: cascadeUpdate });
+    }
+
     res.json({ message: "Production entry updated successfully" });
   } catch (error) {
     res.status(500).json({ detail: error.message });
@@ -130,11 +146,15 @@ router.put("/:prodId", authenticate, async (req, res) => {
 
 router.delete("/:prodId", authenticate, async (req, res) => {
   try {
-    const result = await Production.deleteOne({ id: req.params.prodId });
-    if (result.deletedCount === 0) {
-      return res.status(404).json({ detail: "Production entry not found" });
-    }
-    res.json({ message: "Production entry deleted successfully" });
+    const entry = await Production.findOne({ id: req.params.prodId }).lean();
+    if (!entry) return res.status(404).json({ detail: "Production entry not found" });
+
+    // Delete this entry and all its cascaded children
+    const deleteResult = await Production.deleteMany({
+      $or: [{ id: req.params.prodId }, { parent_production_id: req.params.prodId }]
+    });
+
+    res.json({ message: `Deleted ${deleteResult.deletedCount} production entry(s)` });
   } catch (error) {
     res.status(500).json({ detail: error.message });
   }

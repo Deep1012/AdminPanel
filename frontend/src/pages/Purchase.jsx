@@ -130,7 +130,7 @@ const Purchase = () => {
                 <p className="text-muted-foreground">Manage raw material (metal sheets) purchases</p>
                 <div className="flex gap-2">
                     <Button variant="outline" onClick={() => {
-                        const data = filteredPurchases.length > 0 ? filteredPurchases : purchases;
+                        const data = filteredPurchases;
                         if (exportToExcel({ data, columns: PURCHASE_EXPORT_COLUMNS, fileName: 'Purchases', sheetName: 'Purchases' })) toast.success('Exported to Excel');
                         else toast.error('No data to export');
                     }} className="font-bold uppercase tracking-wider rounded-sm" data-testid="export-purchase-btn">

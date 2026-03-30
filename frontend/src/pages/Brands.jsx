@@ -81,7 +81,7 @@ const Brands = () => {
                 <p className="text-muted-foreground">Manage paint brand product lines</p>
                 <div className="flex gap-2">
                     <Button variant="outline" onClick={() => {
-                        const data = filteredBrands.length > 0 ? filteredBrands : brands;
+                        const data = filteredBrands;
                         if (exportToExcel({ data, columns: BRANDS_EXPORT_COLUMNS, fileName: 'Brands', sheetName: 'Brands' })) toast.success('Exported to Excel');
                         else toast.error('No data to export');
                     }} className="font-bold uppercase tracking-wider rounded-sm" data-testid="export-brands-btn">

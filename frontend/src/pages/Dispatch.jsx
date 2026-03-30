@@ -131,8 +131,7 @@ const Dispatch = () => {
                 <p className="text-muted-foreground">Manage dispatch orders and shipments</p>
                 <div className="flex gap-2">
                     <Button variant="outline" onClick={() => {
-                        const data = filteredDispatches.length > 0 ? filteredDispatches : dispatches;
-                        if (exportToExcel({ data, columns: DISPATCH_EXPORT_COLUMNS, fileName: 'Dispatches', sheetName: 'Dispatches' })) toast.success('Exported to Excel');
+                        if (exportToExcel({ data: filteredDispatches, columns: DISPATCH_EXPORT_COLUMNS, fileName: 'Dispatches', sheetName: 'Dispatches' })) toast.success('Exported to Excel');
                         else toast.error('No data to export');
                     }} className="font-bold uppercase tracking-wider rounded-sm" data-testid="export-dispatch-btn">
                         <Download className="w-4 h-4 mr-2" /> Export
@@ -194,6 +193,8 @@ const Dispatch = () => {
                                     <SelectItem value="none">None</SelectItem>
                                     {purchaseOrders
                                         .filter(po => {
+                                            // Hide fully fulfilled POs
+                                            if ((po.quantity_dispatched || 0) >= po.quantity) return false;
                                             if (!formData.brand_id && !formData.size_id) return true;
                                             const matchBrand = !formData.brand_id || po.brand_id === formData.brand_id;
                                             const matchSize = !formData.size_id || po.size_id === formData.size_id;

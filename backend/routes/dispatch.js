@@ -23,12 +23,13 @@ router.post("/", authenticate, async (req, res) => {
   try {
     const { customer_name, brand_id, brand_name, size_id, size_name, quantity, notes, dispatch_date, purchase_order_id } = req.body;
 
-    // Resolve PO: use explicit link or auto-match by brand+size
+    // Resolve PO: use explicit link or auto-match by brand+size+customer
     let resolvedPoId = purchase_order_id || null;
-    if (!resolvedPoId && brand_id && size_id) {
+    if (!resolvedPoId && brand_id && size_id && customer_name) {
       const matchingPo = await PurchaseOrder.findOne({
         brand_id,
         size_id,
+        company_name: customer_name,
         $expr: { $gt: [{ $subtract: ["$quantity", { $ifNull: ["$quantity_dispatched", 0] }] }, 0] }
       }).sort({ date: 1 }).lean();
       if (matchingPo) resolvedPoId = matchingPo.id;
@@ -117,18 +118,17 @@ router.put("/:dispatchId", authenticate, async (req, res) => {
     if (purchase_order_id !== undefined) updateData.purchase_order_id = purchase_order_id || null;
 
     // Validate new PO capacity if changing PO or quantity
-    const newPoId = purchase_order_id !== undefined ? purchase_order_id : oldDispatch.purchase_order_id;
+    const newPoId = purchase_order_id !== undefined ? (purchase_order_id || null) : oldDispatch.purchase_order_id;
     const newQty = quantity !== undefined ? quantity : oldDispatch.quantity;
     if (newPoId) {
       const po = await PurchaseOrder.findOne({ id: newPoId }).lean();
-      if (po) {
-        const currentDispatched = po.quantity_dispatched || 0;
-        // Subtract old dispatch contribution if same PO
-        const oldContribution = (oldDispatch.purchase_order_id === newPoId) ? oldDispatch.quantity : 0;
-        const remaining = po.quantity - currentDispatched + oldContribution;
-        if (newQty > remaining) {
-          return res.status(400).json({ detail: `Dispatch quantity (${newQty}) exceeds remaining PO quantity (${remaining})` });
-        }
+      if (!po) return res.status(404).json({ detail: "Linked purchase order not found" });
+      const currentDispatched = po.quantity_dispatched || 0;
+      // Subtract old dispatch contribution if same PO
+      const oldContribution = (oldDispatch.purchase_order_id === newPoId) ? oldDispatch.quantity : 0;
+      const remaining = po.quantity - currentDispatched + oldContribution;
+      if (newQty > remaining) {
+        return res.status(400).json({ detail: `Dispatch quantity (${newQty}) exceeds remaining PO quantity (${remaining})` });
       }
     }
 

@@ -13,7 +13,6 @@ const purchaseOrderSchema = new mongoose.Schema(
     quantity: { type: Number, required: true, min: 1 },
     quantity_dispatched: { type: Number, default: 0 },
     notes: { type: String, default: null },
-    dispatch_id: { type: String, default: null },
     created_by: { type: String, required: true },
     created_at: { type: String, required: true },
   },

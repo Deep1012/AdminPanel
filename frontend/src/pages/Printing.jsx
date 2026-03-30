@@ -173,8 +173,7 @@ const Printing = () => {
                 <p className="text-muted-foreground">Manage printing and coating jobs linked to raw materials</p>
                 <div className="flex gap-2">
                     <Button variant="outline" onClick={() => {
-                        const data = filteredJobs.length > 0 ? filteredJobs : jobs;
-                        if (exportToExcel({ data, columns: PRINTING_EXPORT_COLUMNS, fileName: 'Printing_Jobs', sheetName: 'Printing Jobs' })) toast.success('Exported to Excel');
+                        if (exportToExcel({ data: filteredJobs, columns: PRINTING_EXPORT_COLUMNS, fileName: 'Printing_Jobs', sheetName: 'Printing Jobs' })) toast.success('Exported to Excel');
                         else toast.error('No data to export');
                     }} className="font-bold uppercase tracking-wider rounded-sm" data-testid="export-jobs-btn">
                         <Download className="w-4 h-4 mr-2" /> Export

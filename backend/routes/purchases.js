@@ -1,6 +1,7 @@
 const express = require("express");
 const { v4: uuidv4 } = require("uuid");
 const Purchase = require("../models/Purchase");
+const PrintingJob = require("../models/PrintingJob");
 const { authenticate } = require("../middleware/auth");
 
 const router = express.Router();
@@ -144,6 +145,12 @@ router.put("/:purchaseId", authenticate, async (req, res) => {
 
 router.delete("/:purchaseId", authenticate, async (req, res) => {
   try {
+    // Reject if printing jobs are linked to this raw material
+    const linkedJobs = await PrintingJob.countDocuments({ raw_material_id: req.params.purchaseId });
+    if (linkedJobs > 0) {
+      return res.status(400).json({ detail: `Cannot delete: ${linkedJobs} printing job(s) linked to this raw material. Delete them first.` });
+    }
+
     const result = await Purchase.deleteOne({ id: req.params.purchaseId });
     if (result.deletedCount === 0) {
       return res.status(404).json({ detail: "Purchase not found" });
