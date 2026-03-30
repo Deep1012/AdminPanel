@@ -96,9 +96,20 @@ router.get("/", authenticate, async (req, res) => {
 
 router.put("/:jobId", authenticate, async (req, res) => {
   try {
-    const { notes } = req.body;
+    const { notes, job_date, sizes } = req.body;
     const updateData = {};
     if (notes !== undefined) updateData.notes = notes;
+    if (job_date !== undefined) updateData.job_date = job_date;
+    if (sizes !== undefined) {
+      updateData.sizes = sizes;
+      let total_bodies = 0;
+      for (const sizeEntry of sizes) {
+        for (const brand of sizeEntry.brands) {
+          total_bodies += brand.bodies_count;
+        }
+      }
+      updateData.total_bodies = total_bodies;
+    }
 
     if (Object.keys(updateData).length === 0) {
       return res.status(400).json({ detail: "No fields to update" });

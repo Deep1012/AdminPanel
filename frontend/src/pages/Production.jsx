@@ -50,13 +50,19 @@ const Production = () => {
     const [dateFrom, setDateFrom] = useState('');
     const [dateTo, setDateTo] = useState('');
 
+    // Hide auto-cascaded entries (BOTTOM/TOP/LID/LWBF) from display
+    const visibleProduction = useMemo(() =>
+        production.filter(p => !EXCLUDED_BRAND_NAMES.includes(p.brand_name?.toUpperCase())),
+        [production]
+    );
+
     const filters = useMemo(() => [
         ...(dateFrom ? [{ key: 'production_date', value: dateFrom, type: 'dateFrom' }] : []),
         ...(dateTo ? [{ key: 'production_date', value: dateTo, type: 'dateTo' }] : []),
     ], [dateFrom, dateTo]);
 
     const filteredProduction = useTableFilter({
-        data: production, searchTerm, searchFields: ['brand_name', 'size_name'], filters
+        data: visibleProduction, searchTerm, searchFields: ['brand_name', 'size_name'], filters
     });
 
     const { paginatedData: paginatedProduction, currentPage, totalPages, pageSize, setCurrentPage, setPageSize, startIndex, PAGE_SIZE_OPTIONS } = usePagination({ data: filteredProduction });
@@ -120,8 +126,8 @@ const Production = () => {
 
     const clearFilters = () => { setSearchTerm(''); setDateFrom(''); setDateTo(''); };
 
-    const totalProduced = production.reduce((sum, p) => sum + (p.quantity_produced || 0), 0);
-    const totalPrintingUsed = production.reduce((sum, p) => sum + (p.printing_stock_used || 0), 0);
+    const totalProduced = visibleProduction.reduce((sum, p) => sum + (p.quantity_produced || 0), 0);
+    const totalPrintingUsed = visibleProduction.reduce((sum, p) => sum + (p.printing_stock_used || 0), 0);
 
     return (
         <div className="space-y-6 animate-fade-in" data-testid="production-page">
@@ -202,7 +208,7 @@ const Production = () => {
             <ConfirmDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)} title="Delete Production Entry?" description="This will permanently remove this production record." onConfirm={handleDelete} />
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <Card className="industrial-card"><CardContent className="p-4"><div className="flex items-center gap-3"><div className="p-2 bg-primary/10 rounded-sm border border-primary/20"><Factory className="w-5 h-5 text-primary" /></div><div><p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Total Entries</p><p className="font-display text-2xl font-bold">{production.length}</p></div></div></CardContent></Card>
+                <Card className="industrial-card"><CardContent className="p-4"><div className="flex items-center gap-3"><div className="p-2 bg-primary/10 rounded-sm border border-primary/20"><Factory className="w-5 h-5 text-primary" /></div><div><p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Total Entries</p><p className="font-display text-2xl font-bold">{visibleProduction.length}</p></div></div></CardContent></Card>
                 <Card className="industrial-card"><CardContent className="p-4"><div className="flex items-center gap-3"><div className="p-2 bg-warning/10 rounded-sm border border-warning/20"><Factory className="w-5 h-5 text-warning" /></div><div><p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Printing Used</p><p className="font-display text-2xl font-bold">{formatNumber(totalPrintingUsed)}</p></div></div></CardContent></Card>
                 <Card className="industrial-card"><CardContent className="p-4"><div className="flex items-center gap-3"><div className="p-2 bg-success/10 rounded-sm border border-success/20"><Factory className="w-5 h-5 text-success" /></div><div><p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Total Produced</p><p className="font-display text-2xl font-bold">{formatNumber(totalProduced)}</p></div></div></CardContent></Card>
             </div>
@@ -219,13 +225,13 @@ const Production = () => {
                     ]}
                     onClear={clearFilters}
                     resultCount={filteredProduction.length}
-                    totalCount={production.length}
+                    totalCount={visibleProduction.length}
                 />
                 <CardContent className="p-0">
                     {loading ? (
                         <div className="flex items-center justify-center h-48"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
                     ) : filteredProduction.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center h-48 text-muted-foreground"><AlertCircle className="w-8 h-8 mb-2" /><p>{production.length === 0 ? 'No production records' : 'No matching records'}</p></div>
+                        <div className="flex flex-col items-center justify-center h-48 text-muted-foreground"><AlertCircle className="w-8 h-8 mb-2" /><p>{visibleProduction.length === 0 ? 'No production records' : 'No matching records'}</p></div>
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="data-table" data-testid="production-table">

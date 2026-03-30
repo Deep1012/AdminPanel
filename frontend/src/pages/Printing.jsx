@@ -50,7 +50,12 @@ const Printing = () => {
     const [currentBodiesCount, setCurrentBodiesCount] = useState('');
 
     const [editingId, setEditingId] = useState(null);
-    const [editForm, setEditForm] = useState({ notes: '' });
+    const [editForm, setEditForm] = useState({ notes: '', job_date: '' });
+    const [editEntries, setEditEntries] = useState([]);
+    const [editSizeId, setEditSizeId] = useState('');
+    const [editBrandId, setEditBrandId] = useState('');
+    const [editBodiesCount, setEditBodiesCount] = useState('');
+    const [editMaterialInfo, setEditMaterialInfo] = useState(null);
 
     // Search & filter
     const [searchTerm, setSearchTerm] = useState('');
@@ -147,13 +152,52 @@ const Printing = () => {
         finally { setSubmitting(false); }
     };
 
-    const openEdit = (job) => { setEditingId(job.id); setEditForm({ notes: job.notes || '' }); setEditDialogOpen(true); };
+    const openEdit = (row) => {
+        const job = jobs.find(j => j.id === row.id);
+        if (!job) return;
+        setEditingId(job.id);
+        const entries = [];
+        for (const sizeEntry of (job.sizes || [])) {
+            for (const brand of (sizeEntry.brands || [])) {
+                entries.push({ size_id: sizeEntry.size_id, size_name: sizeEntry.size_name, brand_id: brand.brand_id, brand_name: brand.brand_name, bodies_count: brand.bodies_count });
+            }
+        }
+        setEditEntries(entries);
+        setEditMaterialInfo({ sr_no: job.raw_material_sr_no, size: job.raw_material_size, sheets: job.sheets_from_material });
+        setEditForm({
+            job_date: job.job_date ? job.job_date.split('T')[0] : new Date().toISOString().split('T')[0],
+            notes: job.notes || '',
+        });
+        setEditSizeId(''); setEditBrandId(''); setEditBodiesCount('');
+        setEditDialogOpen(true);
+    };
+
+    const handleEditAddEntry = () => {
+        if (!editSizeId || !editBrandId || !editBodiesCount) { toast.error('Please select size, brand and enter bodies count'); return; }
+        const size = sizes.find(s => s.id === editSizeId);
+        const brand = brands.find(b => b.id === editBrandId);
+        if (!size || !brand) return;
+        setEditEntries([...editEntries, { size_id: size.id, size_name: size.name, brand_id: brand.id, brand_name: brand.name, bodies_count: parseInt(editBodiesCount) }]);
+        setEditSizeId(''); setEditBrandId(''); setEditBodiesCount('');
+    };
 
     const handleEditSubmit = async (e) => {
         e.preventDefault();
+        if (editEntries.length === 0) { toast.error('Add at least one entry'); return; }
+        const sizesMap = {};
+        editEntries.forEach(entry => {
+            if (!sizesMap[entry.size_id]) { sizesMap[entry.size_id] = { size_id: entry.size_id, size_name: entry.size_name, brands: [] }; }
+            sizesMap[entry.size_id].brands.push({ brand_id: entry.brand_id, brand_name: entry.brand_name, bodies_count: entry.bodies_count });
+        });
         setSubmitting(true);
-        try { await printingAPI.update(editingId, { notes: editForm.notes || null }); toast.success('Job updated'); setEditDialogOpen(false); fetchData(); }
-        catch (err) { toast.error('Failed to update job'); }
+        try {
+            await printingAPI.update(editingId, {
+                job_date: new Date(editForm.job_date).toISOString(),
+                sizes: Object.values(sizesMap),
+                notes: editForm.notes || null,
+            });
+            toast.success('Job updated'); setEditDialogOpen(false); fetchData();
+        } catch (err) { toast.error('Failed to update job'); }
         finally { setSubmitting(false); }
     };
 
@@ -262,14 +306,65 @@ const Printing = () => {
 
             {/* Edit Job Dialog */}
             <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-                <DialogContent className="bg-card border-border rounded-sm max-w-sm">
+                <DialogContent className="bg-card border-border rounded-sm max-w-xl max-h-[90vh] overflow-y-auto">
                     <DialogHeader><DialogTitle className="font-display text-xl font-bold tracking-tight uppercase">Edit Printing Job</DialogTitle></DialogHeader>
                     <form onSubmit={handleEditSubmit} className="space-y-4 mt-4">
+                        <div className="space-y-2">
+                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Date *</Label>
+                            <Input type="date" value={editForm.job_date} onChange={(e) => setEditForm({ ...editForm, job_date: e.target.value })} className="bg-background border-input rounded-sm font-mono" />
+                        </div>
+                        {editMaterialInfo && (
+                            <div className="p-3 bg-secondary/50 rounded-sm border border-border grid grid-cols-3 gap-4 text-sm">
+                                <div><p className="text-xs font-bold uppercase text-muted-foreground">Raw Material</p><p className="font-mono font-bold">{editMaterialInfo.sr_no}</p></div>
+                                <div><p className="text-xs font-bold uppercase text-muted-foreground">Size</p><p className="font-mono">{editMaterialInfo.size}</p></div>
+                                <div><p className="text-xs font-bold uppercase text-muted-foreground">Sheets</p><p className="font-mono font-bold text-primary">{formatNumber(editMaterialInfo.sheets)}</p></div>
+                            </div>
+                        )}
+                        <div className="border-t border-border pt-4"><Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Size, Brand & Bodies</Label></div>
+                        <div className="grid grid-cols-4 gap-2">
+                            <Select value={editSizeId} onValueChange={setEditSizeId}>
+                                <SelectTrigger className="bg-background border-input rounded-sm"><SelectValue placeholder="Size" /></SelectTrigger>
+                                <SelectContent className="bg-card border-border rounded-sm">{sizes.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+                            </Select>
+                            <Select value={editBrandId} onValueChange={setEditBrandId}>
+                                <SelectTrigger className="bg-background border-input rounded-sm"><SelectValue placeholder="Brand" /></SelectTrigger>
+                                <SelectContent className="bg-card border-border rounded-sm max-h-60">{brands.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
+                            </Select>
+                            <Input type="number" value={editBodiesCount} onChange={(e) => setEditBodiesCount(e.target.value)} placeholder="Bodies" className="bg-background border-input rounded-sm font-mono" />
+                            <Button type="button" onClick={handleEditAddEntry} className="rounded-sm"><Plus className="w-4 h-4" /></Button>
+                        </div>
+                        {editEntries.length > 0 && (
+                            <div className="space-y-2">
+                                <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Entries ({editEntries.length})</Label>
+                                <div className="space-y-1 max-h-40 overflow-y-auto">
+                                    {editEntries.map((entry, idx) => (
+                                        <div key={idx} className="flex items-center justify-between p-2 bg-secondary/50 rounded-sm">
+                                            <div className="flex items-center gap-2">
+                                                <Badge variant="outline">{entry.size_name}</Badge>
+                                                <span className="text-sm">{entry.brand_name}</span>
+                                                <Badge variant="secondary" className="font-mono">{formatNumber(entry.bodies_count)} bodies</Badge>
+                                            </div>
+                                            <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => setEditEntries(editEntries.filter((_, i) => i !== idx))}><Trash2 className="w-3 h-3" /></Button>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="flex justify-between text-sm p-2 bg-success/10 rounded-sm border border-success/20">
+                                    <span className="font-bold uppercase tracking-wider">Total Bodies</span>
+                                    <span className="font-mono font-bold text-success">{formatNumber(editEntries.reduce((sum, e) => sum + e.bodies_count, 0))}</span>
+                                </div>
+                                {editMaterialInfo && (
+                                    <div className="flex justify-between text-sm p-2 bg-primary/10 rounded-sm border border-primary/20">
+                                        <span className="font-bold uppercase tracking-wider">Total Printing (Bodies x Sheets)</span>
+                                        <span className="font-mono font-bold text-primary">{formatNumber(editEntries.reduce((sum, e) => sum + e.bodies_count, 0) * (editMaterialInfo.sheets || 0))}</span>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                         <div className="space-y-2">
                             <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Notes</Label>
                             <Textarea value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} placeholder="Optional notes..." className="bg-background border-input rounded-sm" />
                         </div>
-                        <Button type="submit" className="w-full font-bold uppercase tracking-wider rounded-sm" disabled={submitting}>
+                        <Button type="submit" className="w-full font-bold uppercase tracking-wider rounded-sm" disabled={submitting || editEntries.length === 0}>
                             {submitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</> : 'Update Job'}
                         </Button>
                     </form>
