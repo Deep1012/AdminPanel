@@ -51,6 +51,13 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "healthy" });
 });
 
+// Keep-alive: self-ping every 14 minutes to prevent Render free tier spin-down
+const cron = require("node-cron");
+const RENDER_URL = process.env.RENDER_EXTERNAL_URL || "https://timestin-crm-backend.onrender.com";
+cron.schedule("*/14 * * * *", () => {
+  fetch(`${RENDER_URL}/api/health`).catch(() => {});
+});
+
 // Start server
 connectDB().then(() => {
   app.listen(PORT, () => {
