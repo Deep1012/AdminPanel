@@ -12,8 +12,10 @@ export const AuthProvider = ({ children }) => {
         const storedUser = localStorage.getItem('user');
         
         if (token && storedUser) {
-            setUser(JSON.parse(storedUser));
-            // Verify token is still valid
+            const parsed = JSON.parse(storedUser);
+            setUser(parsed);
+            setLoading(false);
+            // Verify token in background (don't block UI)
             authAPI.getMe()
                 .then(res => {
                     setUser(res.data);
@@ -21,9 +23,6 @@ export const AuthProvider = ({ children }) => {
                 })
                 .catch(() => {
                     logout();
-                })
-                .finally(() => {
-                    setLoading(false);
                 });
         } else {
             setLoading(false);
