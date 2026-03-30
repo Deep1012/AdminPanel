@@ -40,7 +40,8 @@
       "mcp__render__list_deploys",
       "mcp__netlify__netlify-deploy-services-reader",
       "mcp__render__list_logs",
-      "Bash(npx netlify-cli:*)"
+      "Bash(npx netlify-cli:*)",
+      "Bash(node -e \":*)"
     ]
   }
 }
