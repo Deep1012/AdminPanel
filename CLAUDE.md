@@ -12,6 +12,30 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **No. of Sheets** = Weight / (Gauge x Size1 x Size2 / 100000 x 0.785)
 - **Printing Stock** = Bodies in Job x Sheets from Raw Material
 - **Available Printing Stock** = Printing Done - Used in Production
+- **Finished Goods Available** = Quantity Produced - Quantity Dispatched
+
+### Production Cascading Logic
+When a production entry is created for any brand that is NOT one of the excluded brands (BOTTOM, TOP, LID, BOTTOM LWBF, LID LWBF):
+1. **Always**: Auto-creates matching entries for BOTTOM, TOP, and LID of the same size and quantity
+2. **LWBF brands only**: If the source brand has `is_lwbf=true`, also auto-creates BOTTOM LWBF and LID LWBF entries
+
+LWBF-flagged brands: LWBF, B/FILLER, COMM LWBF, COMM B/FILLER, 2KG LWBF, PRIDE PUTTY, PLAIN. Managed via the LWBF toggle on the Brands page.
+
+Cascaded entries track their parent via `parent_production_id`. Deleting or updating a parent propagates to all children.
+
+### PO-Dispatch Sync
+- Creating a dispatch linked to a PO increments the PO's `quantity_dispatched`
+- Updating a dispatch reverses the old PO sync and applies the new one
+- Deleting a dispatch decrements the PO's `quantity_dispatched`
+- Dispatch creation auto-matches to a PO by brand + size + customer if no PO is explicitly selected
+- Over-dispatch is rejected (quantity cannot exceed PO remaining)
+- PO quantity cannot be reduced below already-dispatched amount
+
+### Pipeline Integrity
+- Deleting a printing job rolls back `sheets_used` on the raw material
+- Deleting a raw material is blocked if printing jobs reference it
+- Deleting a PO unlinks all referencing dispatches (sets `purchase_order_id=null`)
+- Production form excludes cascade target brands (BOTTOM/TOP/LID/LWBF) from the dropdown
 
 ## Commands
 
@@ -47,11 +71,17 @@ Node.js + Express + Mongoose. Structured into models, routes, middleware, and co
 - `server.js` - Express app entry, CORS, route mounting
 - `config/db.js` - MongoDB Atlas connection via Mongoose
 - `middleware/auth.js` - JWT verification (`authenticate`) and role gate (`adminRequired`)
-- `models/` - Mongoose schemas: User, Brand, Size, Purchase, PrintingJob, Production, Dispatch, PurchaseOrder
-- `routes/` - Express routers: auth, users, brands, sizes, purchases, printingJobs, production, dispatch, dashboard, purchaseOrders
+- `models/` - Mongoose schemas: User, Brand, Size, Purchase, PrintingJob, Production, Dispatch, PurchaseOrder, MenuItem, Customer
+- `routes/` - Express routers: auth, users, brands, sizes, purchases, printingJobs, production, dispatch, dashboard, purchaseOrders, customers, menuItems, admin
 - `seed-data.js` - Standalone seed script (`npm run seed`) — clears operational data and inserts 12 entries per collection
 
-**Collections:** `users`, `brands`, `sizes`, `purchases`, `printingjobs`, `productions`, `dispatches`, `purchaseorders`
+**Collections:** `users`, `brands`, `sizes`, `purchases`, `printingjobs`, `productions`, `dispatches`, `purchaseorders`, `customers`, `menuitems`
+
+**Key model fields:**
+- `Brand.is_lwbf` (Boolean) — flags brands that trigger LWBF cascade in production
+- `Production.parent_production_id` (String) — links cascaded entries to their parent
+- `Dispatch.purchase_order_id` (String) — links dispatches to POs for quantity tracking
+- `PurchaseOrder.quantity_dispatched` (Number) — auto-synced from dispatch operations
 
 **Auth:** JWT (HS256) with Bearer tokens. 24h expiry. Two roles: `admin` and `user`.
 
@@ -65,7 +95,9 @@ React 19 + CRA (via craco) + Tailwind CSS 3 + shadcn/ui (new-york style, JSX not
 - `src/context/AuthContext.js` - Auth state (token in localStorage, user object)
 - `src/components/Layout.jsx` - Sidebar + header shell wrapping all protected pages
 - `src/components/ui/` - shadcn/ui primitives (do not edit manually; use shadcn CLI to add)
-- `src/pages/` - Route pages: Login, Dashboard, PurchaseOrders, Purchase, Printing, Production, Dispatch, Brands, Sizes, Admin
+- `src/pages/` - Route pages: Login, Dashboard, PurchaseOrders, Purchase, Printing, Production, Dispatch, Brands, Sizes, Customers, Admin, MenuManagement, RawMaterialStock, PrintingStock, FinishedGoods
+- `src/lib/iconMap.js` - Maps icon name strings to lucide-react components (used by dynamic menu)
+- `src/components/SearchableSelect.jsx` - Searchable dropdown for customer selection
 - `src/hooks/usePagination.js` - Client-side pagination hook (all tables)
 - `src/hooks/useTableFilter.js` - Client-side search/filter hook
 - `src/components/TablePagination.jsx` - Pagination UI component
@@ -80,6 +112,16 @@ React 19 + CRA (via craco) + Tailwind CSS 3 + shadcn/ui (new-york style, JSX not
 
 ### Design System
 Dark industrial theme ("Tactical Factory"). Safety orange primary (`#ea580c`), dark zinc backgrounds. Fonts: Barlow Condensed (headings), IBM Plex Sans (body), JetBrains Mono (data). All interactive elements must have `data-testid` attributes. No gradients, no shadows, rounded-sm only. Uppercase labels on table headers and form labels.
+
+### Admin Features
+- **Clear Operational Data** (`/admin` page) — Deletes all purchases, printing jobs, production, dispatches, and POs. Preserves brands, sizes, customers, users, and menu items.
+- **Dynamic Menu Management** (`/menu-management` page) — Admin can add/edit/delete/reorder sidebar navigation items. Menu items stored in DB (`menuitems` collection). Layout fetches from API with hardcoded fallback. System items (Dashboard, Menu Management, Users) cannot be deleted.
+- **LWBF Toggle** (`/brands` page) — Admin toggles which brands trigger LWBF cascade in production.
+
+### Deployment
+- **Backend:** Render (auto-deploy on push) — https://timestin-crm-backend.onrender.com
+- **Frontend:** Netlify (manual deploy via CLI) — https://timestin-crm.netlify.app
+- **Deploy frontend:** `cd frontend && REACT_APP_BACKEND_URL=https://timestin-crm-backend.onrender.com npx craco build && npx netlify-cli deploy --prod --dir=build --site=6e3e1c00-9360-4154-85f6-4bfe7e75c2a7 --no-build`
 
 ## Conventions
 - Forms use react-hook-form + zod validation
