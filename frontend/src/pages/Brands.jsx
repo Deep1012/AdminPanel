@@ -97,7 +97,7 @@ const Brands = () => {
                                 try { if (row.name) { await brandsAPI.create({ name: String(row.name).trim() }); success++; } else failed++; }
                                 catch { failed++; }
                             }
-                            if (success > 0) fetchData();
+                            if (success > 0) fetchBrands();
                             return { success, failed };
                         }}
                     />

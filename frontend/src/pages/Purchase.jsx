@@ -163,7 +163,7 @@ const Purchase = () => {
                                     success++;
                                 } catch { failed++; }
                             }
-                            if (success > 0) fetchData();
+                            if (success > 0) fetchPurchases();
                             return { success, failed };
                         }}
                     />

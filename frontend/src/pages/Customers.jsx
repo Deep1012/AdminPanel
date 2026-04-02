@@ -96,7 +96,7 @@ const Customers = () => {
                                 try { if (row.name) { await customersAPI.create({ name: String(row.name).trim() }); success++; } else failed++; }
                                 catch { failed++; }
                             }
-                            if (success > 0) fetchData();
+                            if (success > 0) fetchCustomers();
                             return { success, failed };
                         }}
                     />

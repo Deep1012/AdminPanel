@@ -43,7 +43,7 @@ const Dashboard = () => {
     const [recentActivity, setRecentActivity] = useState([]);
     const [poSummary, setPOSummary] = useState({ pending_count: 0, latest: [] });
     const [loading, setLoading] = useState(true);
-    const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+    const [selectedDate, setSelectedDate] = useState('');
 
     const fetchTrend = useCallback(async (period) => {
         try {
@@ -58,14 +58,16 @@ const Dashboard = () => {
 
     useEffect(() => { fetchTrend(trendPeriod); }, [trendPeriod, fetchTrend]);
 
+    const isFirstRender = React.useRef(true);
     useEffect(() => {
+        if (isFirstRender.current) { isFirstRender.current = false; return; }
         const fetchDateStats = async () => {
             try {
-                const res = await dashboardAPI.getStats(selectedDate);
+                const res = await dashboardAPI.getStats(selectedDate || undefined);
                 setStats(res.data);
             } catch { /* keep existing */ }
         };
-        if (stats) fetchDateStats();
+        fetchDateStats();
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedDate]);
 
@@ -73,7 +75,7 @@ const Dashboard = () => {
         try {
             setLoading(true);
             const results = await Promise.allSettled([
-                dashboardAPI.getStats(selectedDate),
+                dashboardAPI.getStats(selectedDate || undefined),
                 dashboardAPI.getProductionTrend('monthly'),
                 dashboardAPI.getPurchaseStock(),
                 dashboardAPI.getRecentActivity(),
@@ -96,24 +98,25 @@ const Dashboard = () => {
 
     return (
         <div className="space-y-6 animate-fade-in" data-testid="dashboard-page">
-            {/* Greeting Banner + Date Picker */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <GreetingBanner />
-                <div className="flex items-center gap-2">
-                    <CalendarDays className="w-4 h-4 text-muted-foreground" />
-                    <Input
-                        type="date"
-                        value={selectedDate}
-                        onChange={(e) => setSelectedDate(e.target.value)}
-                        className="bg-background border-input rounded-sm font-mono w-auto"
-                        data-testid="dashboard-date-picker"
-                    />
-                    {selectedDate !== new Date().toISOString().split('T')[0] && (
-                        <Button variant="outline" size="sm" className="text-xs font-bold uppercase rounded-sm" onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}>
-                            Today
-                        </Button>
-                    )}
-                </div>
+            {/* Greeting Banner */}
+            <GreetingBanner />
+
+            {/* Date Filter */}
+            <div className="flex items-center gap-2">
+                <CalendarDays className="w-4 h-4 text-muted-foreground" />
+                <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Filter by date:</span>
+                <Input
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="bg-background border-input rounded-sm font-mono w-auto"
+                    data-testid="dashboard-date-picker"
+                />
+                {selectedDate && (
+                    <Button variant="outline" size="sm" className="text-xs font-bold uppercase rounded-sm" onClick={() => setSelectedDate('')}>
+                        Clear
+                    </Button>
+                )}
             </div>
 
             {/* Stat Cards */}

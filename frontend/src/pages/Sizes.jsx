@@ -96,7 +96,7 @@ const Sizes = () => {
                                 try { if (row.name) { await sizesAPI.create({ name: String(row.name).trim() }); success++; } else failed++; }
                                 catch { failed++; }
                             }
-                            if (success > 0) fetchData();
+                            if (success > 0) fetchSizes();
                             return { success, failed };
                         }}
                     />
