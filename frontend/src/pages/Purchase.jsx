@@ -10,7 +10,7 @@ import TablePagination from '../components/TablePagination';
 import { useTableFilter } from '../hooks/useTableFilter';
 import { usePagination } from '../hooks/usePagination';
 import { purchaseAPI } from '../lib/api';
-import { formatDate, formatNumber } from '../lib/utils';
+import { formatDate, formatNumber, parseImportDate } from '../lib/utils';
 import { Plus, Trash2, Pencil, ShoppingCart, Loader2, AlertCircle, Layers, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { exportToExcel } from '../lib/exportToExcel';
@@ -158,7 +158,7 @@ const Purchase = () => {
                                         gauge: parseFloat(row.gauge), size1: parseFloat(row.size1), size2: parseFloat(row.size2),
                                         temper: String(row.temper), weight: parseFloat(row.weight),
                                         supplier: row.supplier || null, invoice_number: row.invoice_number || null,
-                                        purchase_date: row.purchase_date ? new Date(row.purchase_date).toISOString() : new Date().toISOString(),
+                                        purchase_date: parseImportDate(row.purchase_date) || new Date().toISOString(),
                                     });
                                     success++;
                                 } catch { failed++; }

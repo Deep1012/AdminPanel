@@ -90,7 +90,8 @@ router.get("/available", authenticate, async (req, res) => {
           no_of_sheets: p.no_of_sheets,
           sheets_used,
           sheets_available,
-          display_name: `${p.sr_no} - ${p.size1}x${p.size2} (${sheets_available} sheets)`,
+          weight: p.weight,
+          display_name: `${p.sr_no} - ${p.size1}x${p.size2} | G:${p.gauge} | ${p.weight}kg (${sheets_available} sheets)`,
         });
       }
     }

@@ -104,18 +104,43 @@ router.get("/stats", authenticate, async (req, res) => {
 router.get("/purchase-stock", authenticate, async (req, res) => {
   try {
     const purchases = await Purchase.find({}, { _id: 0, __v: 0 }).lean();
+
+    // Aggregated by size
     const stockMap = {};
+    const gaugeSet = new Set();
     for (const p of purchases) {
       const sizeKey = `${p.size1}x${p.size2}`;
+      const gauge = p.gauge || 0;
+      gaugeSet.add(gauge);
       if (!stockMap[sizeKey]) {
-        stockMap[sizeKey] = { size: sizeKey, gauge: p.gauge || 0, total_sheets: 0, sheets_used: 0, sheets_available: 0, total_weight: 0 };
+        stockMap[sizeKey] = { size: sizeKey, gauge, total_sheets: 0, sheets_used: 0, sheets_available: 0, total_weight: 0 };
       }
       stockMap[sizeKey].total_sheets += p.no_of_sheets || 0;
       stockMap[sizeKey].sheets_used += p.sheets_used || 0;
       stockMap[sizeKey].sheets_available += (p.no_of_sheets || 0) - (p.sheets_used || 0);
       stockMap[sizeKey].total_weight += p.weight || 0;
     }
-    res.json(Object.values(stockMap));
+
+    // Individual entries
+    const individual = purchases.map(p => ({
+      id: p.id,
+      sr_no: p.sr_no,
+      size: `${p.size1}x${p.size2}`,
+      size1: p.size1,
+      size2: p.size2,
+      gauge: p.gauge || 0,
+      temper: p.temper || '-',
+      weight: p.weight || 0,
+      total_sheets: p.no_of_sheets || 0,
+      sheets_used: p.sheets_used || 0,
+      sheets_available: (p.no_of_sheets || 0) - (p.sheets_used || 0),
+      supplier: p.supplier || '-',
+      purchase_date: p.purchase_date,
+    }));
+
+    const gauges = [...gaugeSet].sort((a, b) => a - b);
+
+    res.json({ aggregated: Object.values(stockMap), individual, gauges });
   } catch (error) {
     res.status(500).json({ detail: error.message });
   }

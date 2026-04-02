@@ -14,7 +14,7 @@ import { useTableFilter } from '../hooks/useTableFilter';
 import { usePagination } from '../hooks/usePagination';
 import { purchaseOrdersAPI, brandsAPI, sizesAPI, customersAPI } from '../lib/api';
 import SearchableSelect from '../components/SearchableSelect';
-import { formatDate, formatNumber } from '../lib/utils';
+import { formatDate, formatNumber, parseImportDate } from '../lib/utils';
 import { Plus, Trash2, Pencil, ClipboardList, Loader2, AlertCircle, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { exportToExcel } from '../lib/exportToExcel';
@@ -153,7 +153,7 @@ const PurchaseOrders = () => {
                                     const size = sizes.find(s => s.name.toLowerCase() === String(row.size_name).toLowerCase().trim());
                                     if (!brand || !size) { failed++; continue; }
                                     await purchaseOrdersAPI.create({
-                                        date: row.date ? new Date(row.date).toISOString() : new Date().toISOString(),
+                                        date: parseImportDate(row.date) || new Date().toISOString(),
                                         company_name: String(row.company_name).trim(),
                                         brand_id: brand.id, brand_name: brand.name,
                                         size_id: size.id, size_name: size.name,

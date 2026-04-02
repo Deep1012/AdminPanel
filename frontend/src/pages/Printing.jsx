@@ -13,7 +13,7 @@ import TablePagination from '../components/TablePagination';
 import { useTableFilter } from '../hooks/useTableFilter';
 import { usePagination } from '../hooks/usePagination';
 import { printingAPI, brandsAPI, sizesAPI, purchaseAPI } from '../lib/api';
-import { formatDate, formatNumber } from '../lib/utils';
+import { formatDate, formatNumber, parseImportDate } from '../lib/utils';
 import { Plus, Trash2, Pencil, Printer, Loader2, AlertCircle, Layers, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { exportToExcel } from '../lib/exportToExcel';
@@ -259,7 +259,7 @@ const Printing = () => {
                                     await printingAPI.create({
                                         raw_material_id: material.id,
                                         sizes: [{ size_id: size.id, size_name: size.name, brands: [{ brand_id: brand.id, brand_name: brand.name, bodies_count: parseInt(row.bodies_count), sheets_used: parseInt(row.sheets_used) }] }],
-                                        job_date: row.job_date ? new Date(row.job_date).toISOString() : new Date().toISOString(),
+                                        job_date: parseImportDate(row.job_date) || new Date().toISOString(),
                                         notes: row.notes || null,
                                     });
                                     success++;

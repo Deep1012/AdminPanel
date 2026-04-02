@@ -14,7 +14,7 @@ import { usePagination } from '../hooks/usePagination';
 import { productionAPI, brandsAPI, sizesAPI, dashboardAPI } from '../lib/api';
 
 const EXCLUDED_BRAND_NAMES = ['BOTTOM', 'TOP', 'LID', 'BOTTOM LWBF', 'LID LWBF'];
-import { formatDate, formatNumber } from '../lib/utils';
+import { formatDate, formatNumber, parseImportDate } from '../lib/utils';
 import { Plus, Trash2, Pencil, Factory, Loader2, AlertCircle, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { exportToExcel } from '../lib/exportToExcel';
@@ -164,7 +164,7 @@ const Production = () => {
                                         size_id: size.id, size_name: size.name,
                                         quantity_produced: parseInt(row.quantity_produced),
                                         printing_stock_used: parseInt(row.printing_stock_used) || 0,
-                                        production_date: row.production_date ? new Date(row.production_date).toISOString() : new Date().toISOString(),
+                                        production_date: parseImportDate(row.production_date) || new Date().toISOString(),
                                         notes: row.notes || null,
                                     });
                                     success++;

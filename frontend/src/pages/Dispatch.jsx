@@ -13,7 +13,7 @@ import { useTableFilter } from '../hooks/useTableFilter';
 import { usePagination } from '../hooks/usePagination';
 import { dispatchAPI, brandsAPI, sizesAPI, customersAPI, purchaseOrdersAPI } from '../lib/api';
 import SearchableSelect from '../components/SearchableSelect';
-import { formatDate, formatNumber } from '../lib/utils';
+import { formatDate, formatNumber, parseImportDate } from '../lib/utils';
 import { Plus, Trash2, Pencil, Truck, Loader2, AlertCircle, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { exportToExcel } from '../lib/exportToExcel';
@@ -204,7 +204,7 @@ const Dispatch = () => {
                                     await dispatchAPI.create({
                                         customer_name: String(row.customer_name).trim(),
                                         items: [{ brand_id: brand.id, brand_name: brand.name, size_id: size.id, size_name: size.name, quantity: parseInt(row.quantity), purchase_order_id: null }],
-                                        dispatch_date: row.dispatch_date ? new Date(row.dispatch_date).toISOString() : new Date().toISOString(),
+                                        dispatch_date: parseImportDate(row.dispatch_date) || new Date().toISOString(),
                                         notes: row.notes || null,
                                     });
                                     success++;
