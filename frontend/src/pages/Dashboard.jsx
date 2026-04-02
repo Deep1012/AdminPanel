@@ -7,9 +7,11 @@ import { dashboardAPI } from '../lib/api';
 import { formatNumber, formatDate } from '../lib/utils';
 import GreetingBanner from '../components/dashboard/GreetingBanner';
 import StatCard from '../components/dashboard/StatCard';
+import { Input } from '../components/ui/input';
+import { Button } from '../components/ui/button';
 import {
     ShoppingCart, Printer, Factory, Truck, ClipboardList,
-    Loader2, AlertCircle, Activity
+    Loader2, AlertCircle, Activity, CalendarDays
 } from 'lucide-react';
 import {
     AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -41,6 +43,7 @@ const Dashboard = () => {
     const [recentActivity, setRecentActivity] = useState([]);
     const [poSummary, setPOSummary] = useState({ pending_count: 0, latest: [] });
     const [loading, setLoading] = useState(true);
+    const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
 
     const fetchTrend = useCallback(async (period) => {
         try {
@@ -55,11 +58,22 @@ const Dashboard = () => {
 
     useEffect(() => { fetchTrend(trendPeriod); }, [trendPeriod, fetchTrend]);
 
+    useEffect(() => {
+        const fetchDateStats = async () => {
+            try {
+                const res = await dashboardAPI.getStats(selectedDate);
+                setStats(res.data);
+            } catch { /* keep existing */ }
+        };
+        if (stats) fetchDateStats();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedDate]);
+
     const fetchData = async () => {
         try {
             setLoading(true);
             const results = await Promise.allSettled([
-                dashboardAPI.getStats(),
+                dashboardAPI.getStats(selectedDate),
                 dashboardAPI.getProductionTrend('monthly'),
                 dashboardAPI.getPurchaseStock(),
                 dashboardAPI.getRecentActivity(),
@@ -82,47 +96,64 @@ const Dashboard = () => {
 
     return (
         <div className="space-y-6 animate-fade-in" data-testid="dashboard-page">
-            {/* Greeting Banner */}
-            <GreetingBanner />
+            {/* Greeting Banner + Date Picker */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <GreetingBanner />
+                <div className="flex items-center gap-2">
+                    <CalendarDays className="w-4 h-4 text-muted-foreground" />
+                    <Input
+                        type="date"
+                        value={selectedDate}
+                        onChange={(e) => setSelectedDate(e.target.value)}
+                        className="bg-background border-input rounded-sm font-mono w-auto"
+                        data-testid="dashboard-date-picker"
+                    />
+                    {selectedDate !== new Date().toISOString().split('T')[0] && (
+                        <Button variant="outline" size="sm" className="text-xs font-bold uppercase rounded-sm" onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}>
+                            Today
+                        </Button>
+                    )}
+                </div>
+            </div>
 
             {/* Stat Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                 <StatCard
                     title="Purchases"
-                    value={formatNumber(stats?.purchase?.total_items || 0)}
-                    subtitle={`${formatNumber(stats?.purchase?.total_sheets_available || 0)} sheets avail.`}
+                    value={formatNumber(stats?.date_counts ? stats.date_counts.purchases : (stats?.purchase?.total_items || 0))}
+                    subtitle={stats?.date_counts ? `Total: ${formatNumber(stats.purchase?.total_items || 0)}` : `${formatNumber(stats?.purchase?.total_sheets_available || 0)} sheets avail.`}
                     icon={ShoppingCart}
                     color="primary"
                     trend={stats?.trends?.purchases}
                 />
                 <StatCard
                     title="Printing Jobs"
-                    value={formatNumber(stats?.printing_coating?.total_jobs || 0)}
-                    subtitle={`${formatNumber(stats?.printing_coating?.total_printing_stock || 0)} total printing`}
+                    value={formatNumber(stats?.date_counts ? stats.date_counts.printing_jobs : (stats?.printing_coating?.total_jobs || 0))}
+                    subtitle={stats?.date_counts ? `Total: ${formatNumber(stats.printing_coating?.total_jobs || 0)}` : `${formatNumber(stats?.printing_coating?.total_printing_stock || 0)} total printing`}
                     icon={Printer}
                     color="info"
                     trend={stats?.trends?.printing}
                 />
                 <StatCard
                     title="Production"
-                    value={formatNumber(stats?.finished_goods?.total_produced || 0)}
-                    subtitle={`${formatNumber(stats?.finished_goods?.available_stock || 0)} in stock`}
+                    value={formatNumber(stats?.date_counts ? stats.date_counts.production : (stats?.finished_goods?.total_produced || 0))}
+                    subtitle={stats?.date_counts ? `Total: ${formatNumber(stats.finished_goods?.total_produced || 0)}` : `${formatNumber(stats?.finished_goods?.available_stock || 0)} in stock`}
                     icon={Factory}
                     color="success"
                     trend={stats?.trends?.production}
                 />
                 <StatCard
                     title="Dispatches"
-                    value={formatNumber(stats?.dispatch?.total_items || 0)}
-                    subtitle={`${formatNumber(stats?.dispatch?.total_dispatched || 0)} qty dispatched`}
+                    value={formatNumber(stats?.date_counts ? stats.date_counts.dispatches : (stats?.dispatch?.total_items || 0))}
+                    subtitle={stats?.date_counts ? `Total: ${formatNumber(stats.dispatch?.total_items || 0)}` : `${formatNumber(stats?.dispatch?.total_dispatched || 0)} qty dispatched`}
                     icon={Truck}
                     color="warning"
                     trend={stats?.trends?.dispatch}
                 />
                 <StatCard
                     title="Purchase Orders"
-                    value={formatNumber(stats?.purchase_orders?.total || 0)}
-                    subtitle={`${formatNumber(stats?.purchase_orders?.total_quantity || 0)} total qty`}
+                    value={formatNumber(stats?.date_counts ? stats.date_counts.purchase_orders : (stats?.purchase_orders?.total || 0))}
+                    subtitle={stats?.date_counts ? `Total: ${formatNumber(stats.purchase_orders?.total || 0)}` : `${formatNumber(stats?.purchase_orders?.total_quantity || 0)} total qty`}
                     icon={ClipboardList}
                     color="primary"
                     trend={stats?.trends?.purchase_orders}

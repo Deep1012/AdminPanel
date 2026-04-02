@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import TableSearch from '../components/TableSearch';
@@ -23,12 +23,24 @@ const FinishedGoods = () => {
     const [stockData, setStockData] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
+    const [selectedSize, setSelectedSize] = useState('All');
+
+    const uniqueSizes = useMemo(() => {
+        const sizeSet = new Set(stockData.map(r => r.size_name));
+        return ['All', ...[...sizeSet].sort()];
+    }, [stockData]);
+
+    const sizeFilters = useMemo(() =>
+        selectedSize !== 'All' ? [{ key: 'size_name', value: selectedSize, type: 'exact' }] : [],
+    [selectedSize]);
 
     const filteredData = useTableFilter({
-        data: stockData, searchTerm, searchFields: ['size_name', 'brand_name'], filters: []
+        data: stockData, searchTerm, searchFields: ['size_name', 'brand_name'], filters: sizeFilters
     });
 
     const { paginatedData, currentPage, totalPages, pageSize, setCurrentPage, setPageSize, startIndex, PAGE_SIZE_OPTIONS } = usePagination({ data: filteredData });
+
+    useEffect(() => { setCurrentPage(1); }, [selectedSize, setCurrentPage]);
 
     useEffect(() => { fetchData(); }, []);
 
@@ -63,10 +75,26 @@ const FinishedGoods = () => {
                     searchValue={searchTerm}
                     onSearchChange={setSearchTerm}
                     searchPlaceholder="Search by size, brand..."
-                    onClear={() => setSearchTerm('')}
+                    onClear={() => { setSearchTerm(''); setSelectedSize('All'); }}
                     resultCount={filteredData.length}
                     totalCount={stockData.length}
                 />
+                {uniqueSizes.length > 2 && (
+                    <div className="overflow-x-auto px-4 py-2 border-b border-border">
+                        <div className="flex gap-1.5">
+                            {uniqueSizes.map(size => (
+                                <button
+                                    key={size}
+                                    onClick={() => setSelectedSize(size)}
+                                    className={`text-xs px-3 py-1.5 font-bold uppercase tracking-wider rounded-sm whitespace-nowrap transition-colors ${selectedSize === size ? 'bg-primary text-primary-foreground' : 'bg-secondary/50 text-muted-foreground hover:bg-secondary hover:text-foreground'}`}
+                                    data-testid={`size-tab-${size}`}
+                                >
+                                    {size}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
                 <CardContent className="p-0">
                     {loading ? (
                         <div className="flex items-center justify-center h-48"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>

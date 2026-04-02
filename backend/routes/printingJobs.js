@@ -36,10 +36,19 @@ router.post("/", authenticate, async (req, res) => {
     }
 
     let total_bodies = 0;
+    let total_sheets_used = 0;
     for (const sizeEntry of sizes) {
       for (const brand of sizeEntry.brands) {
         total_bodies += brand.bodies_count;
+        total_sheets_used += brand.sheets_used || 0;
       }
+    }
+
+    if (total_sheets_used <= 0) {
+      return res.status(400).json({ detail: "Please specify sheets used for each entry" });
+    }
+    if (total_sheets_used > sheets_available) {
+      return res.status(400).json({ detail: `Total sheets used (${total_sheets_used}) exceeds available sheets (${sheets_available})` });
     }
 
     const job_number = await generateJobNumber();
@@ -50,7 +59,7 @@ router.post("/", authenticate, async (req, res) => {
       raw_material_id,
       raw_material_sr_no: rawMaterial.sr_no,
       raw_material_size: `${rawMaterial.size1}x${rawMaterial.size2}`,
-      sheets_from_material: sheets_available,
+      sheets_from_material: total_sheets_used,
       sizes,
       total_bodies,
       notes: notes || null,
@@ -58,10 +67,10 @@ router.post("/", authenticate, async (req, res) => {
       created_by: req.user.username,
     });
 
-    // Update raw material sheets_used
+    // Update raw material sheets_used by the sum of per-line sheets_used
     await Purchase.updateOne(
       { id: raw_material_id },
-      { $set: { sheets_used: (rawMaterial.sheets_used || 0) + sheets_available } }
+      { $inc: { sheets_used: total_sheets_used } }
     );
 
     res.json(job.toObject({ versionKey: false }));
@@ -101,14 +110,31 @@ router.put("/:jobId", authenticate, async (req, res) => {
     if (notes !== undefined) updateData.notes = notes;
     if (job_date !== undefined) updateData.job_date = job_date;
     if (sizes !== undefined) {
-      updateData.sizes = sizes;
+      const job = await PrintingJob.findOne({ id: req.params.jobId }).lean();
+      if (!job) return res.status(404).json({ detail: "Job not found" });
+
       let total_bodies = 0;
+      let newTotalSheets = 0;
       for (const sizeEntry of sizes) {
         for (const brand of sizeEntry.brands) {
           total_bodies += brand.bodies_count;
+          newTotalSheets += brand.sheets_used || 0;
         }
       }
+      updateData.sizes = sizes;
       updateData.total_bodies = total_bodies;
+
+      const oldSheets = job.sheets_from_material || 0;
+      if (newTotalSheets > 0) {
+        updateData.sheets_from_material = newTotalSheets;
+        const delta = newTotalSheets - oldSheets;
+        if (delta !== 0 && job.raw_material_id) {
+          await Purchase.updateOne(
+            { id: job.raw_material_id },
+            { $inc: { sheets_used: delta } }
+          );
+        }
+      }
     }
 
     if (Object.keys(updateData).length === 0) {

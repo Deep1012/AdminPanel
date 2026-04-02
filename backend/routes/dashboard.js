@@ -30,7 +30,7 @@ router.get("/stats", authenticate, async (req, res) => {
     const total_printing_used = production.reduce((sum, p) => sum + (p.printing_stock_used || 0), 0);
 
     const total_finished_goods = production.reduce((sum, p) => sum + (p.quantity_produced || 0), 0);
-    const total_dispatched = dispatches.reduce((sum, d) => sum + (d.quantity || 0), 0);
+    const total_dispatched = dispatches.reduce((sum, d) => sum + (d.total_quantity || d.quantity || 0), 0);
 
     const po_total_quantity = purchaseOrders.reduce((sum, po) => sum + (po.quantity || 0), 0);
 
@@ -43,6 +43,12 @@ router.get("/stats", authenticate, async (req, res) => {
       if (!dateStr) return false;
       const d = new Date(dateStr);
       return !isNaN(d.getTime()) && d >= start && d < end;
+    };
+
+    const isOnDate = (dateStr, targetDate) => {
+      if (!dateStr) return false;
+      const d = new Date(dateStr);
+      return !isNaN(d.getTime()) && d.toISOString().split("T")[0] === targetDate;
     };
 
     const trends = {
@@ -68,6 +74,19 @@ router.get("/stats", authenticate, async (req, res) => {
       },
     };
 
+    // Date-filtered counts (optional ?date=YYYY-MM-DD param)
+    let date_counts = null;
+    const dateFilter = req.query.date;
+    if (dateFilter) {
+      date_counts = {
+        purchases: purchases.filter(p => isOnDate(p.purchase_date, dateFilter)).length,
+        printing_jobs: printingJobs.filter(j => isOnDate(j.job_date, dateFilter)).length,
+        production: production.filter(p => isOnDate(p.production_date, dateFilter)).reduce((s, p) => s + (p.quantity_produced || 0), 0),
+        dispatches: dispatches.filter(d => isOnDate(d.dispatch_date, dateFilter)).length,
+        purchase_orders: purchaseOrders.filter(po => isOnDate(po.date, dateFilter)).length,
+      };
+    }
+
     res.json({
       purchase: { total_sheets, total_sheets_available, total_weight, total_items: purchases.length },
       printing_coating: { total_printing_stock, printing_stock_available: total_printing_stock - total_printing_used, total_jobs },
@@ -75,6 +94,7 @@ router.get("/stats", authenticate, async (req, res) => {
       dispatch: { total_dispatched, total_items: dispatches.length },
       purchase_orders: { total: purchaseOrders.length, total_quantity: po_total_quantity },
       trends,
+      ...(date_counts ? { date_counts } : {}),
     });
   } catch (error) {
     res.status(500).json({ detail: error.message });
@@ -210,10 +230,11 @@ router.get("/printing-stock-list", authenticate, async (req, res) => {
     const production = await Production.find({}, { _id: 0, __v: 0 }).lean();
     const stockMap = {};
     for (const job of jobs) {
-      const sheets = job.sheets_from_material || 0;
+      const jobSheets = job.sheets_from_material || 0;
       for (const sizeEntry of (job.sizes || [])) {
         const sizeName = sizeEntry.size_name || "Unknown";
         for (const brand of (sizeEntry.brands || [])) {
+          const sheets = brand.sheets_used || jobSheets;
           const key = `${sizeName}_${brand.brand_name}`;
           if (!stockMap[key]) stockMap[key] = { size_name: sizeName, brand_name: brand.brand_name, printing_done: 0, used_in_production: 0, available: 0 };
           stockMap[key].printing_done += (brand.bodies_count || 0) * sheets;
@@ -242,8 +263,11 @@ router.get("/finished-goods-list", authenticate, async (req, res) => {
       stockMap[key].produced += p.quantity_produced || 0;
     }
     for (const d of dispatches) {
-      const key = `${d.size_name || ""}_${d.brand_name || ""}`;
-      if (stockMap[key]) stockMap[key].dispatched += d.quantity || 0;
+      const dispatchItems = (d.items && d.items.length > 0) ? d.items : [{ size_name: d.size_name, brand_name: d.brand_name, quantity: d.quantity }];
+      for (const item of dispatchItems) {
+        const key = `${item.size_name || ""}_${item.brand_name || ""}`;
+        if (stockMap[key]) stockMap[key].dispatched += item.quantity || 0;
+      }
     }
     for (const key of Object.keys(stockMap)) stockMap[key].available = stockMap[key].produced - stockMap[key].dispatched;
     res.json(Object.values(stockMap));

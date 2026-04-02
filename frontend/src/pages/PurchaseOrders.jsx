@@ -18,6 +18,7 @@ import { formatDate, formatNumber } from '../lib/utils';
 import { Plus, Trash2, Pencil, ClipboardList, Loader2, AlertCircle, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { exportToExcel } from '../lib/exportToExcel';
+import ImportExcelButton from '../components/ImportExcelButton';
 
 const PO_EXPORT_COLUMNS = [
     { header: '#', key: 'id', transform: (v, row, idx) => idx + 1 },
@@ -133,6 +134,39 @@ const PurchaseOrders = () => {
                     }} className="font-bold uppercase tracking-wider rounded-sm" data-testid="export-po-btn">
                         <Download className="w-4 h-4 mr-2" /> Export
                     </Button>
+                    <ImportExcelButton
+                        columns={[
+                            { header: 'Date', key: 'date' },
+                            { header: 'Company', key: 'company_name' },
+                            { header: 'Brand', key: 'brand_name' },
+                            { header: 'Size', key: 'size_name' },
+                            { header: 'Quantity', key: 'quantity' },
+                            { header: 'Notes', key: 'notes' },
+                        ]}
+                        templateName="Purchase_Orders"
+                        onImport={async (rows) => {
+                            let success = 0, failed = 0;
+                            for (const row of rows) {
+                                try {
+                                    if (!row.company_name || !row.brand_name || !row.size_name || !row.quantity) { failed++; continue; }
+                                    const brand = brands.find(b => b.name.toLowerCase() === String(row.brand_name).toLowerCase().trim());
+                                    const size = sizes.find(s => s.name.toLowerCase() === String(row.size_name).toLowerCase().trim());
+                                    if (!brand || !size) { failed++; continue; }
+                                    await purchaseOrdersAPI.create({
+                                        date: row.date ? new Date(row.date).toISOString() : new Date().toISOString(),
+                                        company_name: String(row.company_name).trim(),
+                                        brand_id: brand.id, brand_name: brand.name,
+                                        size_id: size.id, size_name: size.name,
+                                        quantity: parseInt(row.quantity),
+                                        notes: row.notes || null,
+                                    });
+                                    success++;
+                                } catch { failed++; }
+                            }
+                            if (success > 0) fetchData();
+                            return { success, failed };
+                        }}
+                    />
                     <Button onClick={openCreate} className="font-bold uppercase tracking-wider rounded-sm" data-testid="add-po-btn">
                         <Plus className="w-4 h-4 mr-2" /> New Order
                     </Button>

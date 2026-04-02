@@ -19,60 +19,104 @@ async function generateOrderNumber() {
   return `DSP-${String(seq).padStart(3, "0")}`;
 }
 
+// Normalize old single-item dispatches to have an items array
+function normalizeDispatch(doc) {
+  const obj = doc.toObject ? doc.toObject({ versionKey: false }) : { ...doc };
+  if (!obj.items || obj.items.length === 0) {
+    if (obj.brand_id) {
+      obj.items = [{
+        brand_id: obj.brand_id,
+        brand_name: obj.brand_name,
+        size_id: obj.size_id,
+        size_name: obj.size_name,
+        quantity: obj.quantity,
+        purchase_order_id: obj.purchase_order_id,
+      }];
+      obj.total_quantity = obj.quantity;
+    } else {
+      obj.items = [];
+      obj.total_quantity = 0;
+    }
+  }
+  return obj;
+}
+
 router.post("/", authenticate, async (req, res) => {
   try {
-    const { customer_name, brand_id, brand_name, size_id, size_name, quantity, notes, dispatch_date, purchase_order_id } = req.body;
+    const { customer_name, notes, dispatch_date, items: reqItems,
+      brand_id, brand_name, size_id, size_name, quantity, purchase_order_id } = req.body;
 
-    // Resolve PO: use explicit link or auto-match by brand+size+customer
-    let resolvedPoId = purchase_order_id || null;
-    if (!resolvedPoId && brand_id && size_id && customer_name) {
-      const matchingPo = await PurchaseOrder.findOne({
-        brand_id,
-        size_id,
-        company_name: customer_name,
-        $expr: { $gt: [{ $subtract: ["$quantity", { $ifNull: ["$quantity_dispatched", 0] }] }, 0] }
-      }).sort({ date: 1 }).lean();
-      if (matchingPo) resolvedPoId = matchingPo.id;
+    // Support both multi-item and legacy single-item payloads
+    let items;
+    if (reqItems && reqItems.length > 0) {
+      items = reqItems;
+    } else if (brand_id && size_id && quantity) {
+      items = [{ brand_id, brand_name, size_id, size_name, quantity, purchase_order_id: purchase_order_id || null }];
+    } else {
+      return res.status(400).json({ detail: "Please provide items or brand/size/quantity" });
     }
 
-    // Validate PO capacity if linked
-    if (resolvedPoId) {
-      const po = await PurchaseOrder.findOne({ id: resolvedPoId }).lean();
-      if (!po) return res.status(404).json({ detail: "Purchase order not found" });
-      const remaining = po.quantity - (po.quantity_dispatched || 0);
-      if (quantity > remaining) {
-        return res.status(400).json({ detail: `Dispatch quantity (${quantity}) exceeds remaining PO quantity (${remaining})` });
+    // Phase 1: Resolve POs and validate all items before any writes
+    const resolvedItems = [];
+    for (const item of items) {
+      let resolvedPoId = item.purchase_order_id || null;
+      if (!resolvedPoId && item.brand_id && item.size_id && customer_name) {
+        const matchingPo = await PurchaseOrder.findOne({
+          brand_id: item.brand_id,
+          size_id: item.size_id,
+          company_name: customer_name,
+          $expr: { $gt: [{ $subtract: ["$quantity", { $ifNull: ["$quantity_dispatched", 0] }] }, 0] }
+        }).sort({ date: 1 }).lean();
+        if (matchingPo) resolvedPoId = matchingPo.id;
       }
+
+      if (resolvedPoId) {
+        const po = await PurchaseOrder.findOne({ id: resolvedPoId }).lean();
+        if (!po) return res.status(404).json({ detail: `Purchase order not found for item ${item.brand_name} ${item.size_name}` });
+        const remaining = po.quantity - (po.quantity_dispatched || 0);
+        if (item.quantity > remaining) {
+          return res.status(400).json({ detail: `Dispatch qty (${item.quantity}) for ${item.brand_name} ${item.size_name} exceeds PO remaining (${remaining})` });
+        }
+      }
+
+      resolvedItems.push({ ...item, purchase_order_id: resolvedPoId });
     }
 
+    // Phase 2: All validations passed — create dispatch and sync POs
     const id = uuidv4();
     const now = dispatch_date || new Date().toISOString();
     const order_number = await generateOrderNumber();
+    const total_quantity = resolvedItems.reduce((sum, i) => sum + (i.quantity || 0), 0);
 
     const entry = await Dispatch.create({
       id,
       order_number,
       customer_name,
-      brand_id,
-      brand_name,
-      size_id,
-      size_name,
-      quantity,
-      purchase_order_id: resolvedPoId,
+      // Populate legacy fields from first item for backwards compat
+      brand_id: resolvedItems[0].brand_id,
+      brand_name: resolvedItems[0].brand_name,
+      size_id: resolvedItems[0].size_id,
+      size_name: resolvedItems[0].size_name,
+      quantity: total_quantity,
+      purchase_order_id: resolvedItems[0].purchase_order_id,
+      items: resolvedItems,
+      total_quantity,
       notes: notes || null,
       dispatch_date: now,
       created_by: req.user.username,
     });
 
-    // Sync PO dispatched quantity
-    if (resolvedPoId) {
-      await PurchaseOrder.updateOne(
-        { id: resolvedPoId },
-        { $inc: { quantity_dispatched: quantity } }
-      );
+    // Sync PO dispatched quantities
+    for (const item of resolvedItems) {
+      if (item.purchase_order_id) {
+        await PurchaseOrder.updateOne(
+          { id: item.purchase_order_id },
+          { $inc: { quantity_dispatched: item.quantity } }
+        );
+      }
     }
 
-    res.json(entry.toObject({ versionKey: false }));
+    res.json(normalizeDispatch(entry));
   } catch (error) {
     res.status(500).json({ detail: error.message });
   }
@@ -83,7 +127,7 @@ router.get("/:dispatchId", authenticate, async (req, res) => {
   try {
     const entry = await Dispatch.findOne({ id: req.params.dispatchId }, { _id: 0, __v: 0 }).lean();
     if (!entry) return res.status(404).json({ detail: "Dispatch not found" });
-    res.json(entry);
+    res.json(normalizeDispatch(entry));
   } catch (error) {
     res.status(500).json({ detail: error.message });
   }
@@ -92,8 +136,8 @@ router.get("/:dispatchId", authenticate, async (req, res) => {
 // GET all dispatches
 router.get("/", authenticate, async (req, res) => {
   try {
-    const entries = await Dispatch.find({}, { _id: 0, __v: 0 }).sort({ dispatch_date: -1 });
-    res.json(entries);
+    const entries = await Dispatch.find({}, { _id: 0, __v: 0 }).sort({ dispatch_date: -1 }).lean();
+    res.json(entries.map(normalizeDispatch));
   } catch (error) {
     res.status(500).json({ detail: error.message });
   }
@@ -101,63 +145,85 @@ router.get("/", authenticate, async (req, res) => {
 
 router.put("/:dispatchId", authenticate, async (req, res) => {
   try {
-    const { notes, customer_name, brand_id, brand_name, size_id, size_name, quantity, dispatch_date, purchase_order_id } = req.body;
+    const { notes, customer_name, dispatch_date, items: reqItems,
+      brand_id, brand_name, size_id, size_name, quantity, purchase_order_id } = req.body;
 
     const oldDispatch = await Dispatch.findOne({ id: req.params.dispatchId }).lean();
     if (!oldDispatch) return res.status(404).json({ detail: "Dispatch not found" });
+    const oldNormalized = normalizeDispatch(oldDispatch);
 
-    const updateData = {};
-    if (notes !== undefined) updateData.notes = notes;
-    if (customer_name !== undefined) updateData.customer_name = customer_name;
-    if (brand_id !== undefined) updateData.brand_id = brand_id;
-    if (brand_name !== undefined) updateData.brand_name = brand_name;
-    if (size_id !== undefined) updateData.size_id = size_id;
-    if (size_name !== undefined) updateData.size_name = size_name;
-    if (quantity !== undefined) updateData.quantity = quantity;
-    if (dispatch_date !== undefined) updateData.dispatch_date = dispatch_date;
-    if (purchase_order_id !== undefined) updateData.purchase_order_id = purchase_order_id || null;
+    // Build new items
+    let newItems;
+    if (reqItems && reqItems.length > 0) {
+      newItems = reqItems;
+    } else if (brand_id && size_id && quantity) {
+      newItems = [{ brand_id, brand_name, size_id, size_name, quantity, purchase_order_id: purchase_order_id || null }];
+    } else {
+      newItems = oldNormalized.items;
+    }
 
-    // Validate new PO capacity if changing PO or quantity
-    const newPoId = purchase_order_id !== undefined ? (purchase_order_id || null) : oldDispatch.purchase_order_id;
-    const newQty = quantity !== undefined ? quantity : oldDispatch.quantity;
-    if (newPoId) {
-      const po = await PurchaseOrder.findOne({ id: newPoId }).lean();
-      if (!po) return res.status(404).json({ detail: "Linked purchase order not found" });
-      const currentDispatched = po.quantity_dispatched || 0;
-      // Subtract old dispatch contribution if same PO
-      const oldContribution = (oldDispatch.purchase_order_id === newPoId) ? oldDispatch.quantity : 0;
-      const remaining = po.quantity - currentDispatched + oldContribution;
-      if (newQty > remaining) {
-        return res.status(400).json({ detail: `Dispatch quantity (${newQty}) exceeds remaining PO quantity (${remaining})` });
+    // Phase 1: Validate PO capacity using net delta per PO
+    const poDelta = {};
+    for (const oi of oldNormalized.items) {
+      if (oi.purchase_order_id) {
+        poDelta[oi.purchase_order_id] = (poDelta[oi.purchase_order_id] || 0) - (oi.quantity || 0);
+      }
+    }
+    for (const item of newItems) {
+      if (item.purchase_order_id) {
+        poDelta[item.purchase_order_id] = (poDelta[item.purchase_order_id] || 0) + (item.quantity || 0);
+      }
+    }
+    for (const [poId, delta] of Object.entries(poDelta)) {
+      if (delta > 0) {
+        const po = await PurchaseOrder.findOne({ id: poId }).lean();
+        if (!po) return res.status(404).json({ detail: `Purchase order not found` });
+        const remaining = po.quantity - (po.quantity_dispatched || 0);
+        if (delta > remaining) {
+          return res.status(400).json({ detail: `Cannot allocate ${delta} more to PO ${po.serial_no}, only ${remaining} remaining` });
+        }
       }
     }
 
-    if (Object.keys(updateData).length === 0) {
-      return res.status(400).json({ detail: "No fields to update" });
+    // Phase 2: Reverse old PO syncs
+    for (const oi of oldNormalized.items) {
+      if (oi.purchase_order_id) {
+        await PurchaseOrder.updateOne(
+          { id: oi.purchase_order_id },
+          { $inc: { quantity_dispatched: -(oi.quantity || 0) } }
+        );
+      }
     }
 
-    // Reverse old PO sync
-    if (oldDispatch.purchase_order_id) {
-      await PurchaseOrder.updateOne(
-        { id: oldDispatch.purchase_order_id },
-        { $inc: { quantity_dispatched: -oldDispatch.quantity } }
-      );
-    }
+    const total_quantity = newItems.reduce((sum, i) => sum + (i.quantity || 0), 0);
+    const updateData = {
+      items: newItems,
+      total_quantity,
+      brand_id: newItems[0].brand_id,
+      brand_name: newItems[0].brand_name,
+      size_id: newItems[0].size_id,
+      size_name: newItems[0].size_name,
+      quantity: total_quantity,
+      purchase_order_id: newItems[0].purchase_order_id,
+    };
+    if (notes !== undefined) updateData.notes = notes;
+    if (customer_name !== undefined) updateData.customer_name = customer_name;
+    if (dispatch_date !== undefined) updateData.dispatch_date = dispatch_date;
 
-    await Dispatch.updateOne({ id: req.params.dispatchId }, { $set: updateData }, { runValidators: true });
+    await Dispatch.updateOne({ id: req.params.dispatchId }, { $set: updateData });
 
-    // Apply new PO sync
-    const updatedPoId = updateData.purchase_order_id !== undefined ? updateData.purchase_order_id : oldDispatch.purchase_order_id;
-    const updatedQty = updateData.quantity !== undefined ? updateData.quantity : oldDispatch.quantity;
-    if (updatedPoId) {
-      await PurchaseOrder.updateOne(
-        { id: updatedPoId },
-        { $inc: { quantity_dispatched: updatedQty } }
-      );
+    // Phase 3: Apply new PO syncs
+    for (const item of newItems) {
+      if (item.purchase_order_id) {
+        await PurchaseOrder.updateOne(
+          { id: item.purchase_order_id },
+          { $inc: { quantity_dispatched: item.quantity } }
+        );
+      }
     }
 
     const updated = await Dispatch.findOne({ id: req.params.dispatchId }, { _id: 0, __v: 0 }).lean();
-    res.json(updated);
+    res.json(normalizeDispatch(updated));
   } catch (error) {
     res.status(500).json({ detail: error.message });
   }
@@ -167,13 +233,16 @@ router.delete("/:dispatchId", authenticate, async (req, res) => {
   try {
     const dispatch = await Dispatch.findOne({ id: req.params.dispatchId }).lean();
     if (!dispatch) return res.status(404).json({ detail: "Dispatch not found" });
+    const normalized = normalizeDispatch(dispatch);
 
-    // Reverse PO sync before deleting
-    if (dispatch.purchase_order_id) {
-      await PurchaseOrder.updateOne(
-        { id: dispatch.purchase_order_id },
-        { $inc: { quantity_dispatched: -dispatch.quantity } }
-      );
+    // Reverse PO sync for all items
+    for (const item of normalized.items) {
+      if (item.purchase_order_id) {
+        await PurchaseOrder.updateOne(
+          { id: item.purchase_order_id },
+          { $inc: { quantity_dispatched: -(item.quantity || 0) } }
+        );
+      }
     }
 
     await Dispatch.deleteOne({ id: req.params.dispatchId });

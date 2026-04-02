@@ -14,6 +14,7 @@ import { formatDate, formatNumber } from '../lib/utils';
 import { Plus, Trash2, Pencil, ShoppingCart, Loader2, AlertCircle, Layers, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { exportToExcel } from '../lib/exportToExcel';
+import ImportExcelButton from '../components/ImportExcelButton';
 
 const PURCHASE_EXPORT_COLUMNS = [
     { header: 'Date', key: 'purchase_date', transform: (v) => formatDate(v) },
@@ -136,6 +137,36 @@ const Purchase = () => {
                     }} className="font-bold uppercase tracking-wider rounded-sm" data-testid="export-purchase-btn">
                         <Download className="w-4 h-4 mr-2" /> Export
                     </Button>
+                    <ImportExcelButton
+                        columns={[
+                            { header: 'Gauge', key: 'gauge' },
+                            { header: 'Size 1', key: 'size1' },
+                            { header: 'Size 2', key: 'size2' },
+                            { header: 'Temper', key: 'temper' },
+                            { header: 'Weight (kg)', key: 'weight' },
+                            { header: 'Supplier', key: 'supplier' },
+                            { header: 'Invoice Number', key: 'invoice_number' },
+                            { header: 'Purchase Date', key: 'purchase_date' },
+                        ]}
+                        templateName="Purchases"
+                        onImport={async (rows) => {
+                            let success = 0, failed = 0;
+                            for (const row of rows) {
+                                try {
+                                    if (!row.gauge || !row.size1 || !row.size2 || !row.temper || !row.weight) { failed++; continue; }
+                                    await purchaseAPI.create({
+                                        gauge: parseFloat(row.gauge), size1: parseFloat(row.size1), size2: parseFloat(row.size2),
+                                        temper: String(row.temper), weight: parseFloat(row.weight),
+                                        supplier: row.supplier || null, invoice_number: row.invoice_number || null,
+                                        purchase_date: row.purchase_date ? new Date(row.purchase_date).toISOString() : new Date().toISOString(),
+                                    });
+                                    success++;
+                                } catch { failed++; }
+                            }
+                            if (success > 0) fetchData();
+                            return { success, failed };
+                        }}
+                    />
                     <Button onClick={openCreate} className="font-bold uppercase tracking-wider rounded-sm" data-testid="add-purchase-btn">
                         <Plus className="w-4 h-4 mr-2" /> Add Entry
                     </Button>

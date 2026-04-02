@@ -109,7 +109,7 @@ export const menuItemsAPI = {
 };
 
 export const dashboardAPI = {
-    getStats: () => api.get('/dashboard/stats'),
+    getStats: (date) => api.get('/dashboard/stats' + (date ? `?date=${date}` : '')),
     getPurchaseStock: () => api.get('/dashboard/purchase-stock'),
     getPrintingStockList: () => api.get('/dashboard/printing-stock-list'),
     getFinishedGoodsList: () => api.get('/dashboard/finished-goods-list'),

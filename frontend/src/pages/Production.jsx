@@ -18,6 +18,7 @@ import { formatDate, formatNumber } from '../lib/utils';
 import { Plus, Trash2, Pencil, Factory, Loader2, AlertCircle, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { exportToExcel } from '../lib/exportToExcel';
+import ImportExcelButton from '../components/ImportExcelButton';
 
 const PRODUCTION_EXPORT_COLUMNS = [
     { header: 'Date', key: 'production_date', transform: (v) => formatDate(v) },
@@ -140,6 +141,39 @@ const Production = () => {
                     }} className="font-bold uppercase tracking-wider rounded-sm" data-testid="export-production-btn">
                         <Download className="w-4 h-4 mr-2" /> Export
                     </Button>
+                    <ImportExcelButton
+                        columns={[
+                            { header: 'Brand', key: 'brand_name' },
+                            { header: 'Size', key: 'size_name' },
+                            { header: 'Qty Produced', key: 'quantity_produced' },
+                            { header: 'Printing Stock Used', key: 'printing_stock_used' },
+                            { header: 'Production Date', key: 'production_date' },
+                            { header: 'Notes', key: 'notes' },
+                        ]}
+                        templateName="Production"
+                        onImport={async (rows) => {
+                            let success = 0, failed = 0;
+                            for (const row of rows) {
+                                try {
+                                    if (!row.brand_name || !row.size_name || !row.quantity_produced) { failed++; continue; }
+                                    const brand = brands.find(b => b.name.toLowerCase() === String(row.brand_name).toLowerCase().trim());
+                                    const size = sizes.find(s => s.name.toLowerCase() === String(row.size_name).toLowerCase().trim());
+                                    if (!brand || !size) { failed++; continue; }
+                                    await productionAPI.create({
+                                        brand_id: brand.id, brand_name: brand.name,
+                                        size_id: size.id, size_name: size.name,
+                                        quantity_produced: parseInt(row.quantity_produced),
+                                        printing_stock_used: parseInt(row.printing_stock_used) || 0,
+                                        production_date: row.production_date ? new Date(row.production_date).toISOString() : new Date().toISOString(),
+                                        notes: row.notes || null,
+                                    });
+                                    success++;
+                                } catch { failed++; }
+                            }
+                            if (success > 0) fetchData();
+                            return { success, failed };
+                        }}
+                    />
                     <Button onClick={openCreate} className="font-bold uppercase tracking-wider rounded-sm" data-testid="add-production-btn">
                         <Plus className="w-4 h-4 mr-2" /> Add Production
                     </Button>

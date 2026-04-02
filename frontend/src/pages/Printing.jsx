@@ -17,6 +17,7 @@ import { formatDate, formatNumber } from '../lib/utils';
 import { Plus, Trash2, Pencil, Printer, Loader2, AlertCircle, Layers, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { exportToExcel } from '../lib/exportToExcel';
+import ImportExcelButton from '../components/ImportExcelButton';
 
 const PRINTING_EXPORT_COLUMNS = [
     { header: 'Date', key: 'job_date', transform: (v) => formatDate(v) },
@@ -48,6 +49,7 @@ const Printing = () => {
     const [currentSizeId, setCurrentSizeId] = useState('');
     const [currentBrandId, setCurrentBrandId] = useState('');
     const [currentBodiesCount, setCurrentBodiesCount] = useState('');
+    const [currentSheetsUsed, setCurrentSheetsUsed] = useState('');
 
     const [editingId, setEditingId] = useState(null);
     const [editForm, setEditForm] = useState({ notes: '', job_date: '' });
@@ -55,6 +57,7 @@ const Printing = () => {
     const [editSizeId, setEditSizeId] = useState('');
     const [editBrandId, setEditBrandId] = useState('');
     const [editBodiesCount, setEditBodiesCount] = useState('');
+    const [editSheetsUsed, setEditSheetsUsed] = useState('');
     const [editMaterialInfo, setEditMaterialInfo] = useState(null);
 
     // Search & filter
@@ -66,9 +69,10 @@ const Printing = () => {
     const flattenedRows = useMemo(() => {
         const rows = [];
         for (const job of jobs) {
-            const sheets = job.sheets_from_material || 0;
+            const jobSheets = job.sheets_from_material || 0;
             for (const sizeEntry of (job.sizes || [])) {
                 for (const brand of (sizeEntry.brands || [])) {
+                    const sheets = brand.sheets_used || jobSheets;
                     rows.push({
                         _rowKey: `${job.id}_${sizeEntry.size_id}_${brand.brand_id}`,
                         id: job.id,
@@ -111,7 +115,7 @@ const Printing = () => {
 
     const resetForm = () => {
         setFormData({ raw_material_id: '', notes: '', job_date: new Date().toISOString().split('T')[0] });
-        setSelectedMaterial(null); setJobEntries([]); setCurrentSizeId(''); setCurrentBrandId(''); setCurrentBodiesCount('');
+        setSelectedMaterial(null); setJobEntries([]); setCurrentSizeId(''); setCurrentBrandId(''); setCurrentBodiesCount(''); setCurrentSheetsUsed('');
     };
 
     const handleMaterialChange = (materialId) => {
@@ -120,12 +124,20 @@ const Printing = () => {
     };
 
     const handleAddEntry = () => {
-        if (!currentSizeId || !currentBrandId || !currentBodiesCount) { toast.error('Please select size, brand and enter bodies count'); return; }
+        if (!currentSizeId || !currentBrandId || !currentBodiesCount || !currentSheetsUsed) { toast.error('Please select size, brand, enter bodies and sheets used'); return; }
+        const sheetsVal = parseInt(currentSheetsUsed);
+        if (!sheetsVal || sheetsVal <= 0) { toast.error('Sheets used must be a positive number'); return; }
+        if (selectedMaterial) {
+            const alreadyUsed = jobEntries.reduce((sum, e) => sum + (e.sheets_used || 0), 0);
+            if (alreadyUsed + sheetsVal > selectedMaterial.sheets_available) {
+                toast.error(`Total sheets used (${alreadyUsed + sheetsVal}) exceeds available (${selectedMaterial.sheets_available})`); return;
+            }
+        }
         const size = sizes.find(s => s.id === currentSizeId);
         const brand = brands.find(b => b.id === currentBrandId);
         if (!size || !brand) return;
-        setJobEntries([...jobEntries, { size_id: size.id, size_name: size.name, brand_id: brand.id, brand_name: brand.name, bodies_count: parseInt(currentBodiesCount) }]);
-        setCurrentSizeId(''); setCurrentBrandId(''); setCurrentBodiesCount('');
+        setJobEntries([...jobEntries, { size_id: size.id, size_name: size.name, brand_id: brand.id, brand_name: brand.name, bodies_count: parseInt(currentBodiesCount), sheets_used: sheetsVal }]);
+        setCurrentSizeId(''); setCurrentBrandId(''); setCurrentBodiesCount(''); setCurrentSheetsUsed('');
     };
 
     const handleRemoveEntry = (index) => { setJobEntries(jobEntries.filter((_, i) => i !== index)); };
@@ -138,7 +150,7 @@ const Printing = () => {
         const sizesMap = {};
         jobEntries.forEach(entry => {
             if (!sizesMap[entry.size_id]) { sizesMap[entry.size_id] = { size_id: entry.size_id, size_name: entry.size_name, brands: [] }; }
-            sizesMap[entry.size_id].brands.push({ brand_id: entry.brand_id, brand_name: entry.brand_name, bodies_count: entry.bodies_count });
+            sizesMap[entry.size_id].brands.push({ brand_id: entry.brand_id, brand_name: entry.brand_name, bodies_count: entry.bodies_count, sheets_used: entry.sheets_used });
         });
         setSubmitting(true);
         try {
@@ -159,7 +171,7 @@ const Printing = () => {
         const entries = [];
         for (const sizeEntry of (job.sizes || [])) {
             for (const brand of (sizeEntry.brands || [])) {
-                entries.push({ size_id: sizeEntry.size_id, size_name: sizeEntry.size_name, brand_id: brand.brand_id, brand_name: brand.brand_name, bodies_count: brand.bodies_count });
+                entries.push({ size_id: sizeEntry.size_id, size_name: sizeEntry.size_name, brand_id: brand.brand_id, brand_name: brand.brand_name, bodies_count: brand.bodies_count, sheets_used: brand.sheets_used || job.sheets_from_material || 0 });
             }
         }
         setEditEntries(entries);
@@ -168,17 +180,19 @@ const Printing = () => {
             job_date: job.job_date ? job.job_date.split('T')[0] : new Date().toISOString().split('T')[0],
             notes: job.notes || '',
         });
-        setEditSizeId(''); setEditBrandId(''); setEditBodiesCount('');
+        setEditSizeId(''); setEditBrandId(''); setEditBodiesCount(''); setEditSheetsUsed('');
         setEditDialogOpen(true);
     };
 
     const handleEditAddEntry = () => {
-        if (!editSizeId || !editBrandId || !editBodiesCount) { toast.error('Please select size, brand and enter bodies count'); return; }
+        if (!editSizeId || !editBrandId || !editBodiesCount || !editSheetsUsed) { toast.error('Please select size, brand, enter bodies and sheets used'); return; }
+        const sheetsVal = parseInt(editSheetsUsed);
+        if (!sheetsVal || sheetsVal <= 0) { toast.error('Sheets used must be a positive number'); return; }
         const size = sizes.find(s => s.id === editSizeId);
         const brand = brands.find(b => b.id === editBrandId);
         if (!size || !brand) return;
-        setEditEntries([...editEntries, { size_id: size.id, size_name: size.name, brand_id: brand.id, brand_name: brand.name, bodies_count: parseInt(editBodiesCount) }]);
-        setEditSizeId(''); setEditBrandId(''); setEditBodiesCount('');
+        setEditEntries([...editEntries, { size_id: size.id, size_name: size.name, brand_id: brand.id, brand_name: brand.name, bodies_count: parseInt(editBodiesCount), sheets_used: sheetsVal }]);
+        setEditSizeId(''); setEditBrandId(''); setEditBodiesCount(''); setEditSheetsUsed('');
     };
 
     const handleEditSubmit = async (e) => {
@@ -187,7 +201,7 @@ const Printing = () => {
         const sizesMap = {};
         editEntries.forEach(entry => {
             if (!sizesMap[entry.size_id]) { sizesMap[entry.size_id] = { size_id: entry.size_id, size_name: entry.size_name, brands: [] }; }
-            sizesMap[entry.size_id].brands.push({ brand_id: entry.brand_id, brand_name: entry.brand_name, bodies_count: entry.bodies_count });
+            sizesMap[entry.size_id].brands.push({ brand_id: entry.brand_id, brand_name: entry.brand_name, bodies_count: entry.bodies_count, sheets_used: entry.sheets_used });
         });
         setSubmitting(true);
         try {
@@ -222,6 +236,39 @@ const Printing = () => {
                     }} className="font-bold uppercase tracking-wider rounded-sm" data-testid="export-jobs-btn">
                         <Download className="w-4 h-4 mr-2" /> Export
                     </Button>
+                    <ImportExcelButton
+                        columns={[
+                            { header: 'Raw Material Sr No', key: 'raw_material_sr_no' },
+                            { header: 'Size', key: 'size_name' },
+                            { header: 'Brand', key: 'brand_name' },
+                            { header: 'Bodies', key: 'bodies_count' },
+                            { header: 'Sheets Used', key: 'sheets_used' },
+                            { header: 'Job Date', key: 'job_date' },
+                            { header: 'Notes', key: 'notes' },
+                        ]}
+                        templateName="Printing_Jobs"
+                        onImport={async (rows) => {
+                            let success = 0, failed = 0;
+                            for (const row of rows) {
+                                try {
+                                    if (!row.raw_material_sr_no || !row.size_name || !row.brand_name || !row.bodies_count || !row.sheets_used) { failed++; continue; }
+                                    const material = availableMaterials.find(m => m.sr_no === String(row.raw_material_sr_no).trim());
+                                    const brand = brands.find(b => b.name.toLowerCase() === String(row.brand_name).toLowerCase().trim());
+                                    const size = sizes.find(s => s.name.toLowerCase() === String(row.size_name).toLowerCase().trim());
+                                    if (!material || !brand || !size) { failed++; continue; }
+                                    await printingAPI.create({
+                                        raw_material_id: material.id,
+                                        sizes: [{ size_id: size.id, size_name: size.name, brands: [{ brand_id: brand.id, brand_name: brand.name, bodies_count: parseInt(row.bodies_count), sheets_used: parseInt(row.sheets_used) }] }],
+                                        job_date: row.job_date ? new Date(row.job_date).toISOString() : new Date().toISOString(),
+                                        notes: row.notes || null,
+                                    });
+                                    success++;
+                                } catch { failed++; }
+                            }
+                            if (success > 0) fetchData();
+                            return { success, failed };
+                        }}
+                    />
                     <Button onClick={() => { resetForm(); setDialogOpen(true); }} className="font-bold uppercase tracking-wider rounded-sm" data-testid="add-job-btn">
                         <Plus className="w-4 h-4 mr-2" /> New Job
                     </Button>
@@ -253,8 +300,8 @@ const Printing = () => {
                                 <div><p className="text-xs font-bold uppercase text-muted-foreground">Available Sheets</p><p className="font-mono font-bold text-primary">{formatNumber(selectedMaterial.sheets_available)}</p></div>
                             </div>
                         )}
-                        <div className="border-t border-border pt-4"><Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Add Size, Brand & Bodies</Label></div>
-                        <div className="grid grid-cols-4 gap-2">
+                        <div className="border-t border-border pt-4"><Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Add Size, Brand, Bodies & Sheets</Label></div>
+                        <div className="grid grid-cols-5 gap-2">
                             <Select value={currentSizeId} onValueChange={setCurrentSizeId}>
                                 <SelectTrigger className="bg-background border-input rounded-sm" data-testid="container-size"><SelectValue placeholder="Size" /></SelectTrigger>
                                 <SelectContent className="bg-card border-border rounded-sm">{sizes.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
@@ -264,6 +311,7 @@ const Printing = () => {
                                 <SelectContent className="bg-card border-border rounded-sm max-h-60">{brands.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
                             </Select>
                             <Input type="number" value={currentBodiesCount} onChange={(e) => setCurrentBodiesCount(e.target.value)} placeholder="Bodies" className="bg-background border-input rounded-sm font-mono" data-testid="bodies-count" />
+                            <Input type="number" value={currentSheetsUsed} onChange={(e) => setCurrentSheetsUsed(e.target.value)} placeholder="Sheets" className="bg-background border-input rounded-sm font-mono" data-testid="sheets-used" />
                             <Button type="button" onClick={handleAddEntry} className="rounded-sm" data-testid="add-entry-btn"><Plus className="w-4 h-4" /></Button>
                         </div>
                         {jobEntries.length > 0 && (
@@ -276,21 +324,20 @@ const Printing = () => {
                                                 <Badge variant="outline">{entry.size_name}</Badge>
                                                 <span className="text-sm">{entry.brand_name}</span>
                                                 <Badge variant="secondary" className="font-mono">{formatNumber(entry.bodies_count)} bodies</Badge>
+                                                <Badge variant="secondary" className="font-mono text-primary">{formatNumber(entry.sheets_used)} sheets</Badge>
                                             </div>
                                             <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => handleRemoveEntry(idx)}><Trash2 className="w-3 h-3" /></Button>
                                         </div>
                                     ))}
                                 </div>
                                 <div className="flex justify-between text-sm p-2 bg-success/10 rounded-sm border border-success/20">
-                                    <span className="font-bold uppercase tracking-wider">Total Bodies</span>
-                                    <span className="font-mono font-bold text-success">{formatNumber(getTotalBodies())}</span>
+                                    <span className="font-bold uppercase tracking-wider">Total Sheets Used</span>
+                                    <span className="font-mono font-bold text-success">{formatNumber(jobEntries.reduce((sum, e) => sum + (e.sheets_used || 0), 0))}{selectedMaterial ? ` / ${formatNumber(selectedMaterial.sheets_available)}` : ''}</span>
                                 </div>
-                                {selectedMaterial && (
-                                    <div className="flex justify-between text-sm p-2 bg-primary/10 rounded-sm border border-primary/20">
-                                        <span className="font-bold uppercase tracking-wider">Total Printing (Bodies × Sheets)</span>
-                                        <span className="font-mono font-bold text-primary">{formatNumber(getTotalBodies() * (selectedMaterial.sheets_available || 0))}</span>
-                                    </div>
-                                )}
+                                <div className="flex justify-between text-sm p-2 bg-primary/10 rounded-sm border border-primary/20">
+                                    <span className="font-bold uppercase tracking-wider">Total Printing (Bodies × Sheets)</span>
+                                    <span className="font-mono font-bold text-primary">{formatNumber(jobEntries.reduce((sum, e) => sum + (e.bodies_count * (e.sheets_used || 0)), 0))}</span>
+                                </div>
                             </div>
                         )}
                         <div className="space-y-2">
@@ -320,8 +367,8 @@ const Printing = () => {
                                 <div><p className="text-xs font-bold uppercase text-muted-foreground">Sheets</p><p className="font-mono font-bold text-primary">{formatNumber(editMaterialInfo.sheets)}</p></div>
                             </div>
                         )}
-                        <div className="border-t border-border pt-4"><Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Size, Brand & Bodies</Label></div>
-                        <div className="grid grid-cols-4 gap-2">
+                        <div className="border-t border-border pt-4"><Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Size, Brand, Bodies & Sheets</Label></div>
+                        <div className="grid grid-cols-5 gap-2">
                             <Select value={editSizeId} onValueChange={setEditSizeId}>
                                 <SelectTrigger className="bg-background border-input rounded-sm"><SelectValue placeholder="Size" /></SelectTrigger>
                                 <SelectContent className="bg-card border-border rounded-sm">{sizes.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
@@ -331,6 +378,7 @@ const Printing = () => {
                                 <SelectContent className="bg-card border-border rounded-sm max-h-60">{brands.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
                             </Select>
                             <Input type="number" value={editBodiesCount} onChange={(e) => setEditBodiesCount(e.target.value)} placeholder="Bodies" className="bg-background border-input rounded-sm font-mono" />
+                            <Input type="number" value={editSheetsUsed} onChange={(e) => setEditSheetsUsed(e.target.value)} placeholder="Sheets" className="bg-background border-input rounded-sm font-mono" />
                             <Button type="button" onClick={handleEditAddEntry} className="rounded-sm"><Plus className="w-4 h-4" /></Button>
                         </div>
                         {editEntries.length > 0 && (
@@ -343,21 +391,20 @@ const Printing = () => {
                                                 <Badge variant="outline">{entry.size_name}</Badge>
                                                 <span className="text-sm">{entry.brand_name}</span>
                                                 <Badge variant="secondary" className="font-mono">{formatNumber(entry.bodies_count)} bodies</Badge>
+                                                <Badge variant="secondary" className="font-mono text-primary">{formatNumber(entry.sheets_used || 0)} sheets</Badge>
                                             </div>
                                             <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => setEditEntries(editEntries.filter((_, i) => i !== idx))}><Trash2 className="w-3 h-3" /></Button>
                                         </div>
                                     ))}
                                 </div>
                                 <div className="flex justify-between text-sm p-2 bg-success/10 rounded-sm border border-success/20">
-                                    <span className="font-bold uppercase tracking-wider">Total Bodies</span>
-                                    <span className="font-mono font-bold text-success">{formatNumber(editEntries.reduce((sum, e) => sum + e.bodies_count, 0))}</span>
+                                    <span className="font-bold uppercase tracking-wider">Total Sheets Used</span>
+                                    <span className="font-mono font-bold text-success">{formatNumber(editEntries.reduce((sum, e) => sum + (e.sheets_used || 0), 0))}</span>
                                 </div>
-                                {editMaterialInfo && (
-                                    <div className="flex justify-between text-sm p-2 bg-primary/10 rounded-sm border border-primary/20">
-                                        <span className="font-bold uppercase tracking-wider">Total Printing (Bodies x Sheets)</span>
-                                        <span className="font-mono font-bold text-primary">{formatNumber(editEntries.reduce((sum, e) => sum + e.bodies_count, 0) * (editMaterialInfo.sheets || 0))}</span>
-                                    </div>
-                                )}
+                                <div className="flex justify-between text-sm p-2 bg-primary/10 rounded-sm border border-primary/20">
+                                    <span className="font-bold uppercase tracking-wider">Total Printing (Bodies x Sheets)</span>
+                                    <span className="font-mono font-bold text-primary">{formatNumber(editEntries.reduce((sum, e) => sum + (e.bodies_count * (e.sheets_used || 0)), 0))}</span>
+                                </div>
                             </div>
                         )}
                         <div className="space-y-2">

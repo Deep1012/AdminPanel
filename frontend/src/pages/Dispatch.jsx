@@ -17,6 +17,7 @@ import { formatDate, formatNumber } from '../lib/utils';
 import { Plus, Trash2, Pencil, Truck, Loader2, AlertCircle, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { exportToExcel } from '../lib/exportToExcel';
+import ImportExcelButton from '../components/ImportExcelButton';
 
 const DISPATCH_EXPORT_COLUMNS = [
     { header: 'Date', key: 'dispatch_date', transform: (v) => formatDate(v) },
@@ -28,12 +29,6 @@ const DISPATCH_EXPORT_COLUMNS = [
     { header: 'Created By', key: 'created_by' },
 ];
 
-const emptyForm = {
-    customer_name: '', brand_id: '', size_id: '', quantity: '',
-    notes: '', dispatch_date: new Date().toISOString().split('T')[0],
-    purchase_order_id: ''
-};
-
 const Dispatch = () => {
     const [dispatches, setDispatches] = useState([]);
     const [brands, setBrands] = useState([]);
@@ -44,8 +39,21 @@ const Dispatch = () => {
     const [dialogOpen, setDialogOpen] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [editingId, setEditingId] = useState(null);
-    const [formData, setFormData] = useState({ ...emptyForm });
     const [deleteTarget, setDeleteTarget] = useState(null);
+
+    // Shared dispatch fields
+    const [customerName, setCustomerName] = useState('');
+    const [dispatchDate, setDispatchDate] = useState(new Date().toISOString().split('T')[0]);
+    const [dispatchNotes, setDispatchNotes] = useState('');
+
+    // Per-item input state
+    const [currentBrandId, setCurrentBrandId] = useState('');
+    const [currentSizeId, setCurrentSizeId] = useState('');
+    const [currentQuantity, setCurrentQuantity] = useState('');
+    const [currentPoId, setCurrentPoId] = useState('');
+
+    // Multi-item list
+    const [dispatchItems, setDispatchItems] = useState([]);
 
     const [searchTerm, setSearchTerm] = useState('');
     const [dateFrom, setDateFrom] = useState('');
@@ -56,8 +64,29 @@ const Dispatch = () => {
         ...(dateTo ? [{ key: 'dispatch_date', value: dateTo, type: 'dateTo' }] : []),
     ], [dateFrom, dateTo]);
 
+    // Flatten dispatches: one row per item
+    const flattenedRows = useMemo(() => {
+        const rows = [];
+        for (const d of dispatches) {
+            const items = (d.items && d.items.length > 0) ? d.items : [{ brand_id: d.brand_id, brand_name: d.brand_name, size_id: d.size_id, size_name: d.size_name, quantity: d.quantity, purchase_order_id: d.purchase_order_id }];
+            for (const item of items) {
+                rows.push({
+                    ...d,
+                    brand_id: item.brand_id,
+                    brand_name: item.brand_name,
+                    size_id: item.size_id,
+                    size_name: item.size_name,
+                    quantity: item.quantity,
+                    purchase_order_id: item.purchase_order_id,
+                    _rowKey: `${d.id}_${item.brand_id}_${item.size_id}`,
+                });
+            }
+        }
+        return rows;
+    }, [dispatches]);
+
     const filteredDispatches = useTableFilter({
-        data: dispatches, searchTerm, searchFields: ['order_number', 'customer_name'], filters
+        data: flattenedRows, searchTerm, searchFields: ['order_number', 'customer_name', 'brand_name'], filters
     });
 
     const { paginatedData: paginatedDispatches, currentPage, totalPages, pageSize, setCurrentPage, setPageSize, startIndex, PAGE_SIZE_OPTIONS } = usePagination({ data: filteredDispatches });
@@ -75,41 +104,59 @@ const Dispatch = () => {
         finally { setLoading(false); }
     };
 
-    const openCreate = () => { setEditingId(null); setFormData({ ...emptyForm }); setDialogOpen(true); };
-    const openEdit = (d) => {
+    const resetForm = () => {
+        setCustomerName(''); setDispatchDate(new Date().toISOString().split('T')[0]); setDispatchNotes('');
+        setCurrentBrandId(''); setCurrentSizeId(''); setCurrentQuantity(''); setCurrentPoId('');
+        setDispatchItems([]);
+    };
+
+    const openCreate = () => { setEditingId(null); resetForm(); setDialogOpen(true); };
+
+    const openEdit = (row) => {
+        const d = dispatches.find(di => di.id === row.id);
+        if (!d) return;
         setEditingId(d.id);
-        setFormData({
-            customer_name: d.customer_name || '',
-            brand_id: d.brand_id || '', size_id: d.size_id || '',
-            quantity: String(d.quantity),
-            notes: d.notes || '',
-            dispatch_date: d.dispatch_date ? d.dispatch_date.split('T')[0] : new Date().toISOString().split('T')[0],
-            purchase_order_id: d.purchase_order_id || '',
-        });
+        setCustomerName(d.customer_name || '');
+        setDispatchDate(d.dispatch_date ? d.dispatch_date.split('T')[0] : new Date().toISOString().split('T')[0]);
+        setDispatchNotes(d.notes || '');
+        const items = (d.items && d.items.length > 0) ? d.items : [{ brand_id: d.brand_id, brand_name: d.brand_name, size_id: d.size_id, size_name: d.size_name, quantity: d.quantity, purchase_order_id: d.purchase_order_id }];
+        setDispatchItems(items.map(i => ({ ...i })));
+        setCurrentBrandId(''); setCurrentSizeId(''); setCurrentQuantity(''); setCurrentPoId('');
         setDialogOpen(true);
     };
 
+    const handleAddItem = () => {
+        if (!currentBrandId || !currentSizeId || !currentQuantity) { toast.error('Please select brand, size and enter quantity'); return; }
+        const brand = brands.find(b => b.id === currentBrandId);
+        const size = sizes.find(s => s.id === currentSizeId);
+        if (!brand || !size) return;
+        setDispatchItems([...dispatchItems, {
+            brand_id: brand.id, brand_name: brand.name,
+            size_id: size.id, size_name: size.name,
+            quantity: parseInt(currentQuantity),
+            purchase_order_id: currentPoId || null,
+        }]);
+        setCurrentBrandId(''); setCurrentSizeId(''); setCurrentQuantity(''); setCurrentPoId('');
+    };
+
+    const handleRemoveItem = (index) => { setDispatchItems(dispatchItems.filter((_, i) => i !== index)); };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!formData.customer_name || !formData.brand_id || !formData.size_id || !formData.quantity) {
-            toast.error('Please fill all required fields'); return;
+        if (!customerName || dispatchItems.length === 0) {
+            toast.error('Please select customer and add at least one item'); return;
         }
         setSubmitting(true);
         try {
-            const brand = brands.find(b => b.id === formData.brand_id);
-            const size = sizes.find(s => s.id === formData.size_id);
             const payload = {
-                customer_name: formData.customer_name,
-                brand_id: formData.brand_id, brand_name: brand?.name || '',
-                size_id: formData.size_id, size_name: size?.name || '',
-                quantity: parseInt(formData.quantity),
-                notes: formData.notes || null,
-                dispatch_date: new Date(formData.dispatch_date).toISOString(),
-                purchase_order_id: formData.purchase_order_id || null,
+                customer_name: customerName,
+                dispatch_date: new Date(dispatchDate).toISOString(),
+                notes: dispatchNotes || null,
+                items: dispatchItems,
             };
             if (editingId) { await dispatchAPI.update(editingId, payload); toast.success('Dispatch updated'); }
             else { await dispatchAPI.create(payload); toast.success('Dispatch created'); }
-            setDialogOpen(false); fetchData();
+            setDialogOpen(false); resetForm(); fetchData();
         } catch (err) { toast.error(err.response?.data?.detail || 'Failed to save dispatch'); }
         finally { setSubmitting(false); }
     };
@@ -123,7 +170,7 @@ const Dispatch = () => {
 
     const clearFilters = () => { setSearchTerm(''); setDateFrom(''); setDateTo(''); };
 
-    const totalQuantity = dispatches.reduce((sum, d) => sum + (d.quantity || 0), 0);
+    const totalQuantity = dispatches.reduce((sum, d) => sum + (d.total_quantity || d.quantity || 0), 0);
 
     return (
         <div className="space-y-6 animate-fade-in" data-testid="dispatch-page">
@@ -136,14 +183,45 @@ const Dispatch = () => {
                     }} className="font-bold uppercase tracking-wider rounded-sm" data-testid="export-dispatch-btn">
                         <Download className="w-4 h-4 mr-2" /> Export
                     </Button>
+                    <ImportExcelButton
+                        columns={[
+                            { header: 'Customer', key: 'customer_name' },
+                            { header: 'Brand', key: 'brand_name' },
+                            { header: 'Size', key: 'size_name' },
+                            { header: 'Quantity', key: 'quantity' },
+                            { header: 'Dispatch Date', key: 'dispatch_date' },
+                            { header: 'Notes', key: 'notes' },
+                        ]}
+                        templateName="Dispatches"
+                        onImport={async (rows) => {
+                            let success = 0, failed = 0;
+                            for (const row of rows) {
+                                try {
+                                    if (!row.customer_name || !row.brand_name || !row.size_name || !row.quantity) { failed++; continue; }
+                                    const brand = brands.find(b => b.name.toLowerCase() === String(row.brand_name).toLowerCase().trim());
+                                    const size = sizes.find(s => s.name.toLowerCase() === String(row.size_name).toLowerCase().trim());
+                                    if (!brand || !size) { failed++; continue; }
+                                    await dispatchAPI.create({
+                                        customer_name: String(row.customer_name).trim(),
+                                        items: [{ brand_id: brand.id, brand_name: brand.name, size_id: size.id, size_name: size.name, quantity: parseInt(row.quantity), purchase_order_id: null }],
+                                        dispatch_date: row.dispatch_date ? new Date(row.dispatch_date).toISOString() : new Date().toISOString(),
+                                        notes: row.notes || null,
+                                    });
+                                    success++;
+                                } catch { failed++; }
+                            }
+                            if (success > 0) fetchData();
+                            return { success, failed };
+                        }}
+                    />
                     <Button onClick={openCreate} className="font-bold uppercase tracking-wider rounded-sm" data-testid="add-dispatch-btn">
                         <Plus className="w-4 h-4 mr-2" /> New Dispatch
                     </Button>
                 </div>
             </div>
 
-            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                <DialogContent className="bg-card border-border rounded-sm max-w-md">
+            <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetForm(); }}>
+                <DialogContent className="bg-card border-border rounded-sm max-w-xl max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
                         <DialogTitle className="font-display text-xl font-bold tracking-tight uppercase">
                             {editingId ? 'Edit Dispatch Order' : 'Create Dispatch Order'}
@@ -152,68 +230,82 @@ const Dispatch = () => {
                     <form onSubmit={handleSubmit} className="space-y-4 mt-4">
                         <div className="space-y-2">
                             <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Date *</Label>
-                            <Input type="date" value={formData.dispatch_date} onChange={(e) => setFormData({ ...formData, dispatch_date: e.target.value })} className="bg-background border-input rounded-sm font-mono" data-testid="dispatch-date" />
+                            <Input type="date" value={dispatchDate} onChange={(e) => setDispatchDate(e.target.value)} className="bg-background border-input rounded-sm font-mono" data-testid="dispatch-date" />
                         </div>
                         <div className="space-y-2">
                             <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Customer *</Label>
                             <SearchableSelect
                                 options={customers.map(c => ({ value: c.name, label: c.name }))}
-                                value={formData.customer_name}
-                                onValueChange={(v) => setFormData({ ...formData, customer_name: v })}
+                                value={customerName}
+                                onValueChange={setCustomerName}
                                 placeholder="Select customer"
                                 searchPlaceholder="Search customers..."
                                 data-testid="dispatch-customer"
                             />
                         </div>
-                        <div className="space-y-2">
-                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Brand *</Label>
-                            <Select value={formData.brand_id} onValueChange={(v) => setFormData({ ...formData, brand_id: v })}>
-                                <SelectTrigger className="bg-background border-input rounded-sm" data-testid="dispatch-brand"><SelectValue placeholder="Select brand" /></SelectTrigger>
+                        <div className="border-t border-border pt-4"><Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Add Items (Brand, Size, Qty)</Label></div>
+                        <div className="grid grid-cols-5 gap-2">
+                            <Select value={currentBrandId} onValueChange={setCurrentBrandId}>
+                                <SelectTrigger className="bg-background border-input rounded-sm" data-testid="dispatch-brand"><SelectValue placeholder="Brand" /></SelectTrigger>
                                 <SelectContent className="bg-card border-border rounded-sm max-h-60">{brands.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
                             </Select>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Size *</Label>
-                                <Select value={formData.size_id} onValueChange={(v) => setFormData({ ...formData, size_id: v })}>
-                                    <SelectTrigger className="bg-background border-input rounded-sm" data-testid="dispatch-size"><SelectValue placeholder="Select" /></SelectTrigger>
-                                    <SelectContent className="bg-card border-border rounded-sm">{sizes.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
-                                </Select>
-                            </div>
-                            <div className="space-y-2">
-                                <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Quantity *</Label>
-                                <Input type="number" value={formData.quantity} onChange={(e) => setFormData({ ...formData, quantity: e.target.value })} placeholder="0" className="bg-background border-input rounded-sm font-mono" data-testid="dispatch-quantity" />
-                            </div>
-                        </div>
-                        <div className="space-y-2">
-                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Link to Purchase Order</Label>
-                            <Select value={formData.purchase_order_id} onValueChange={(v) => setFormData({ ...formData, purchase_order_id: v === 'none' ? '' : v })}>
-                                <SelectTrigger className="bg-background border-input rounded-sm" data-testid="dispatch-po"><SelectValue placeholder="None (optional)" /></SelectTrigger>
+                            <Select value={currentSizeId} onValueChange={setCurrentSizeId}>
+                                <SelectTrigger className="bg-background border-input rounded-sm" data-testid="dispatch-size"><SelectValue placeholder="Size" /></SelectTrigger>
+                                <SelectContent className="bg-card border-border rounded-sm">{sizes.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+                            </Select>
+                            <Input type="number" value={currentQuantity} onChange={(e) => setCurrentQuantity(e.target.value)} placeholder="Qty" className="bg-background border-input rounded-sm font-mono" data-testid="dispatch-quantity" />
+                            <Select value={currentPoId} onValueChange={(v) => setCurrentPoId(v === 'none' ? '' : v)}>
+                                <SelectTrigger className="bg-background border-input rounded-sm" data-testid="dispatch-po"><SelectValue placeholder="PO" /></SelectTrigger>
                                 <SelectContent className="bg-card border-border rounded-sm max-h-60">
                                     <SelectItem value="none">None</SelectItem>
                                     {purchaseOrders
                                         .filter(po => {
-                                            // Hide fully fulfilled POs
                                             if ((po.quantity_dispatched || 0) >= po.quantity) return false;
-                                            if (!formData.brand_id && !formData.size_id) return true;
-                                            const matchBrand = !formData.brand_id || po.brand_id === formData.brand_id;
-                                            const matchSize = !formData.size_id || po.size_id === formData.size_id;
+                                            const matchBrand = !currentBrandId || po.brand_id === currentBrandId;
+                                            const matchSize = !currentSizeId || po.size_id === currentSizeId;
                                             return matchBrand && matchSize;
                                         })
                                         .map(po => (
                                             <SelectItem key={po.id} value={po.id}>
-                                                {po.serial_no} — {po.company_name} ({po.brand_name} {po.size_name}) [{po.quantity_dispatched || 0}/{po.quantity}]
+                                                {po.serial_no} [{po.quantity_dispatched || 0}/{po.quantity}]
                                             </SelectItem>
                                         ))
                                     }
                                 </SelectContent>
                             </Select>
+                            <Button type="button" onClick={handleAddItem} className="rounded-sm" data-testid="add-item-btn"><Plus className="w-4 h-4" /></Button>
                         </div>
+                        {dispatchItems.length > 0 && (
+                            <div className="space-y-2">
+                                <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Added Items ({dispatchItems.length})</Label>
+                                <div className="space-y-1 max-h-40 overflow-y-auto">
+                                    {dispatchItems.map((item, idx) => (
+                                        <div key={idx} className="flex items-center justify-between p-2 bg-secondary/50 rounded-sm">
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <span className="text-sm font-medium">{item.brand_name}</span>
+                                                <Badge variant="outline">{item.size_name}</Badge>
+                                                <Badge variant="secondary" className="font-mono">{formatNumber(item.quantity)} qty</Badge>
+                                                {item.purchase_order_id && (
+                                                    <Badge variant="secondary" className="font-mono text-xs text-primary">
+                                                        {purchaseOrders.find(po => po.id === item.purchase_order_id)?.serial_no || 'PO'}
+                                                    </Badge>
+                                                )}
+                                            </div>
+                                            <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => handleRemoveItem(idx)}><Trash2 className="w-3 h-3" /></Button>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="flex justify-between text-sm p-2 bg-success/10 rounded-sm border border-success/20">
+                                    <span className="font-bold uppercase tracking-wider">Total Quantity</span>
+                                    <span className="font-mono font-bold text-success">{formatNumber(dispatchItems.reduce((sum, i) => sum + (i.quantity || 0), 0))}</span>
+                                </div>
+                            </div>
+                        )}
                         <div className="space-y-2">
                             <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Notes</Label>
-                            <Input value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} placeholder="Optional notes..." className="bg-background border-input rounded-sm" data-testid="dispatch-notes" />
+                            <Input value={dispatchNotes} onChange={(e) => setDispatchNotes(e.target.value)} placeholder="Optional notes..." className="bg-background border-input rounded-sm" data-testid="dispatch-notes" />
                         </div>
-                        <Button type="submit" className="w-full font-bold uppercase tracking-wider rounded-sm" disabled={submitting} data-testid="submit-dispatch">
+                        <Button type="submit" className="w-full font-bold uppercase tracking-wider rounded-sm" disabled={submitting || dispatchItems.length === 0 || !customerName} data-testid="submit-dispatch">
                             {submitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</> : (editingId ? 'Update Dispatch' : 'Create Dispatch')}
                         </Button>
                     </form>
@@ -232,14 +324,14 @@ const Dispatch = () => {
                 <TableSearch
                     searchValue={searchTerm}
                     onSearchChange={setSearchTerm}
-                    searchPlaceholder="Search by order #, customer..."
+                    searchPlaceholder="Search by order #, customer, brand..."
                     filters={[
                         { key: 'dateFrom', label: 'From Date', type: 'date', value: dateFrom, onChange: setDateFrom },
                         { key: 'dateTo', label: 'To Date', type: 'date', value: dateTo, onChange: setDateTo },
                     ]}
                     onClear={clearFilters}
                     resultCount={filteredDispatches.length}
-                    totalCount={dispatches.length}
+                    totalCount={flattenedRows.length}
                 />
                 <CardContent className="p-0">
                     {loading ? (
@@ -252,7 +344,7 @@ const Dispatch = () => {
                                 <thead><tr><th>#</th><th>Date</th><th>Order #</th><th>Customer</th><th>Brand</th><th>Size</th><th>Qty</th><th>PO</th><th>By</th><th></th></tr></thead>
                                 <tbody>
                                     {paginatedDispatches.map((d, idx) => (
-                                        <tr key={d.id} data-testid={`dispatch-row-${d.id}`}>
+                                        <tr key={d._rowKey} data-testid={`dispatch-row-${d._rowKey}`}>
                                             <td className="text-muted-foreground">{startIndex + idx + 1}</td>
                                             <td>{formatDate(d.dispatch_date)}</td>
                                             <td className="font-mono font-medium">{d.order_number}</td>

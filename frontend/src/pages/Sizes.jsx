@@ -15,6 +15,7 @@ import { formatDate } from '../lib/utils';
 import { Plus, Trash2, Pencil, Ruler, Loader2, AlertCircle, Download } from 'lucide-react';
 import { toast } from 'sonner';
 import { exportToExcel } from '../lib/exportToExcel';
+import ImportExcelButton from '../components/ImportExcelButton';
 
 const SIZES_EXPORT_COLUMNS = [
     { header: '#', key: 'id', transform: (v, row, idx) => idx + 1 },
@@ -86,6 +87,19 @@ const Sizes = () => {
                     }} className="font-bold uppercase tracking-wider rounded-sm" data-testid="export-sizes-btn">
                         <Download className="w-4 h-4 mr-2" /> Export
                     </Button>
+                    <ImportExcelButton
+                        columns={[{ header: 'Name', key: 'name' }]}
+                        templateName="Sizes"
+                        onImport={async (rows) => {
+                            let success = 0, failed = 0;
+                            for (const row of rows) {
+                                try { if (row.name) { await sizesAPI.create({ name: String(row.name).trim() }); success++; } else failed++; }
+                                catch { failed++; }
+                            }
+                            if (success > 0) fetchData();
+                            return { success, failed };
+                        }}
+                    />
                     <Button onClick={openCreate} className="font-bold uppercase tracking-wider rounded-sm" data-testid="add-size-btn">
                         <Plus className="w-4 h-4 mr-2" /> Add Size
                     </Button>
