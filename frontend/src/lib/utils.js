@@ -49,39 +49,39 @@ export function formatNumber(num) {
  * - dd-mm-yyyy or dd/mm/yyyy strings
  * - Excel serial numbers (e.g. 46113)
  * - Native Date-parseable strings (ISO, etc.)
- * Returns an ISO string, or null if unparseable.
+ * Returns "YYYY-MM-DDT12:00:00.000Z" string, or null if unparseable.
+ * Uses noon UTC to prevent any timezone from shifting the calendar day.
+ * Builds ISO strings directly — avoids Date constructor timezone traps.
  */
 export function parseImportDate(value) {
     if (!value) return null;
-    // Helper: create ISO string at noon UTC to prevent timezone day-shift
-    const toNoonUTC = (y, m, d) => new Date(Date.UTC(y, m, d, 12, 0, 0)).toISOString();
-    // Already a Date object (from xlsx cellDates:true)
+    const pad = (n) => String(n).padStart(2, '0');
+    const noonISO = (y, m, d) => `${y}-${pad(m)}-${pad(d)}T12:00:00.000Z`;
+
+    // Date object (from xlsx cellDates:true) — use UTC accessors only
     if (value instanceof Date && !isNaN(value.getTime())) {
-        return toNoonUTC(value.getFullYear(), value.getMonth(), value.getDate());
+        return noonISO(value.getUTCFullYear(), value.getUTCMonth() + 1, value.getUTCDate());
     }
-    // Excel serial number (numeric, typically 1-100000 range)
+    // Excel serial number
     if (typeof value === 'number' && value > 0 && value < 2958466) {
-        const msPerDay = 86400000;
-        const excelEpoch = Date.UTC(1899, 11, 30);
-        const date = new Date(excelEpoch + value * msPerDay);
-        if (!isNaN(date.getTime())) return toNoonUTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+        const d = new Date(Date.UTC(1899, 11, 30) + value * 86400000);
+        return noonISO(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
     }
     const str = String(value).trim();
-    // Match dd-mm-yyyy or dd/mm/yyyy
+    // dd-mm-yyyy or dd/mm/yyyy
     const match = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
     if (match) {
         const day = parseInt(match[1], 10);
-        const month = parseInt(match[2], 10) - 1;
+        const month = parseInt(match[2], 10);
         const year = parseInt(match[3], 10);
-        const check = new Date(Date.UTC(year, month, day));
-        if (!isNaN(check.getTime()) && check.getUTCDate() === day && check.getUTCMonth() === month && check.getUTCFullYear() === year) {
-            return toNoonUTC(year, month, day);
+        if (day >= 1 && day <= 31 && month >= 1 && month <= 12 && year >= 1900) {
+            return noonISO(year, month, day);
         }
     }
-    // Fallback: try native Date parsing, then re-anchor to noon UTC
-    const fallback = new Date(str);
-    if (!isNaN(fallback.getTime()) && fallback.getFullYear() > 1900 && fallback.getFullYear() < 2100) {
-        return toNoonUTC(fallback.getFullYear(), fallback.getMonth(), fallback.getDate());
+    // Fallback: native parse then extract UTC components
+    const fb = new Date(str);
+    if (!isNaN(fb.getTime()) && fb.getUTCFullYear() > 1900 && fb.getUTCFullYear() < 2100) {
+        return noonISO(fb.getUTCFullYear(), fb.getUTCMonth() + 1, fb.getUTCDate());
     }
     return null;
 }

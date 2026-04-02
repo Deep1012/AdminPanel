@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { Button } from './ui/button';
 import { Progress } from './ui/progress';
 import { Upload, FileDown, Loader2, CheckCircle2, XCircle, X } from 'lucide-react';
@@ -7,7 +7,8 @@ import { toast } from 'sonner';
 
 /**
  * Reusable Import Excel button with template download and non-blocking progress bar.
- * Progress shows as a fixed bottom banner so user can continue using the panel.
+ * Progress shows as a sticky bottom banner inside the content area (not over sidebar).
+ * Warns user before leaving page during import.
  */
 const ImportExcelButton = ({ columns, templateName, onImport }) => {
     const fileRef = useRef(null);
@@ -15,6 +16,17 @@ const ImportExcelButton = ({ columns, templateName, onImport }) => {
     const [progress, setProgress] = useState(0);
     const [total, setTotal] = useState(0);
     const [result, setResult] = useState(null);
+
+    // Warn user before refresh/navigation during import
+    useEffect(() => {
+        if (!importing || result) return;
+        const handler = (e) => {
+            e.preventDefault();
+            e.returnValue = '';
+        };
+        window.addEventListener('beforeunload', handler);
+        return () => window.removeEventListener('beforeunload', handler);
+    }, [importing, result]);
 
     const handleFileChange = async (e) => {
         const file = e.target.files?.[0];
@@ -86,16 +98,16 @@ const ImportExcelButton = ({ columns, templateName, onImport }) => {
                 />
             </div>
 
-            {/* Non-blocking fixed bottom progress banner */}
+            {/* Non-blocking sticky bottom progress banner — inside content area only */}
             {importing && (
-                <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card/95 backdrop-blur-sm shadow-lg" data-testid="import-progress-banner">
+                <div className="fixed bottom-0 right-0 left-0 lg:left-64 z-40 border-t border-border bg-card/95 backdrop-blur-sm shadow-lg" data-testid="import-progress-banner">
                     <Progress value={pct} className="h-1.5 rounded-none" />
-                    <div className="flex items-center justify-between px-4 py-2.5 max-w-screen-xl mx-auto">
+                    <div className="flex items-center justify-between px-4 py-2.5">
                         {!isDone ? (
                             <>
                                 <span className="flex items-center gap-2 text-sm text-muted-foreground">
                                     <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                                    Importing {progress} of {total} records...
+                                    Importing {progress} of {total} records — do not refresh the page
                                 </span>
                                 <span className="font-mono text-sm font-bold text-primary">{pct}%</span>
                             </>
