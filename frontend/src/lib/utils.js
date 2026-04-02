@@ -49,14 +49,18 @@ export function formatNumber(num) {
  */
 export function parseImportDate(value) {
     if (!value) return null;
+    // Helper: create ISO string at noon UTC to prevent timezone day-shift
+    const toNoonUTC = (y, m, d) => new Date(Date.UTC(y, m, d, 12, 0, 0)).toISOString();
     // Already a Date object (from xlsx cellDates:true)
-    if (value instanceof Date && !isNaN(value.getTime())) return value.toISOString();
+    if (value instanceof Date && !isNaN(value.getTime())) {
+        return toNoonUTC(value.getFullYear(), value.getMonth(), value.getDate());
+    }
     // Excel serial number (numeric, typically 1-100000 range)
     if (typeof value === 'number' && value > 0 && value < 2958466) {
-        // Excel epoch: Jan 1, 1900 (with the Lotus 1-2-3 leap year bug correction)
-        const excelEpoch = new Date(1899, 11, 30);
-        const date = new Date(excelEpoch.getTime() + value * 86400000);
-        if (!isNaN(date.getTime())) return date.toISOString();
+        const msPerDay = 86400000;
+        const excelEpoch = Date.UTC(1899, 11, 30);
+        const date = new Date(excelEpoch + value * msPerDay);
+        if (!isNaN(date.getTime())) return toNoonUTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
     }
     const str = String(value).trim();
     // Match dd-mm-yyyy or dd/mm/yyyy
@@ -65,14 +69,16 @@ export function parseImportDate(value) {
         const day = parseInt(match[1], 10);
         const month = parseInt(match[2], 10) - 1;
         const year = parseInt(match[3], 10);
-        const date = new Date(year, month, day);
-        if (!isNaN(date.getTime()) && date.getDate() === day && date.getMonth() === month && date.getFullYear() === year) {
-            return date.toISOString();
+        const check = new Date(Date.UTC(year, month, day));
+        if (!isNaN(check.getTime()) && check.getUTCDate() === day && check.getUTCMonth() === month && check.getUTCFullYear() === year) {
+            return toNoonUTC(year, month, day);
         }
     }
-    // Fallback: try native Date parsing
+    // Fallback: try native Date parsing, then re-anchor to noon UTC
     const fallback = new Date(str);
-    if (!isNaN(fallback.getTime()) && fallback.getFullYear() > 1900 && fallback.getFullYear() < 2100) return fallback.toISOString();
+    if (!isNaN(fallback.getTime()) && fallback.getFullYear() > 1900 && fallback.getFullYear() < 2100) {
+        return toNoonUTC(fallback.getFullYear(), fallback.getMonth(), fallback.getDate());
+    }
     return null;
 }
 
