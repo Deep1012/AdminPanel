@@ -149,11 +149,11 @@ const Purchase = () => {
                             { header: 'Purchase Date', key: 'purchase_date' },
                         ]}
                         templateName="Purchases"
-                        onImport={async (rows) => {
+                        onImport={async (rows, onProgress) => {
                             let success = 0, failed = 0;
                             for (const row of rows) {
                                 try {
-                                    if (!row.gauge || !row.size1 || !row.size2 || !row.temper || !row.weight) { failed++; continue; }
+                                    if (!row.gauge || !row.size1 || !row.size2 || !row.temper || !row.weight) { failed++; onProgress(success + failed); continue; }
                                     await purchaseAPI.create({
                                         gauge: parseFloat(row.gauge), size1: parseFloat(row.size1), size2: parseFloat(row.size2),
                                         temper: String(row.temper), weight: parseFloat(row.weight),
@@ -162,6 +162,7 @@ const Purchase = () => {
                                     });
                                     success++;
                                 } catch { failed++; }
+                                onProgress(success + failed);
                             }
                             if (success > 0) fetchPurchases();
                             return { success, failed };

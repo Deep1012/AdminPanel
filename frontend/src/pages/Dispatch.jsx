@@ -193,14 +193,14 @@ const Dispatch = () => {
                             { header: 'Notes', key: 'notes' },
                         ]}
                         templateName="Dispatches"
-                        onImport={async (rows) => {
+                        onImport={async (rows, onProgress) => {
                             let success = 0, failed = 0;
                             for (const row of rows) {
                                 try {
-                                    if (!row.customer_name || !row.brand_name || !row.size_name || !row.quantity) { failed++; continue; }
+                                    if (!row.customer_name || !row.brand_name || !row.size_name || !row.quantity) { failed++; onProgress(success + failed); continue; }
                                     const brand = brands.find(b => b.name.toLowerCase() === String(row.brand_name).toLowerCase().trim());
                                     const size = sizes.find(s => s.name.toLowerCase() === String(row.size_name).toLowerCase().trim());
-                                    if (!brand || !size) { failed++; continue; }
+                                    if (!brand || !size) { failed++; onProgress(success + failed); continue; }
                                     await dispatchAPI.create({
                                         customer_name: String(row.customer_name).trim(),
                                         items: [{ brand_id: brand.id, brand_name: brand.name, size_id: size.id, size_name: size.name, quantity: parseInt(row.quantity), purchase_order_id: null }],
@@ -209,6 +209,7 @@ const Dispatch = () => {
                                     });
                                     success++;
                                 } catch { failed++; }
+                                onProgress(success + failed);
                             }
                             if (success > 0) fetchData();
                             return { success, failed };

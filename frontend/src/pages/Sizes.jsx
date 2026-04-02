@@ -90,11 +90,12 @@ const Sizes = () => {
                     <ImportExcelButton
                         columns={[{ header: 'Name', key: 'name' }]}
                         templateName="Sizes"
-                        onImport={async (rows) => {
+                        onImport={async (rows, onProgress) => {
                             let success = 0, failed = 0;
                             for (const row of rows) {
                                 try { if (row.name) { await sizesAPI.create({ name: String(row.name).trim() }); success++; } else failed++; }
                                 catch { failed++; }
+                                onProgress(success + failed);
                             }
                             if (success > 0) fetchSizes();
                             return { success, failed };

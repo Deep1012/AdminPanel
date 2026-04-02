@@ -247,15 +247,15 @@ const Printing = () => {
                             { header: 'Notes', key: 'notes' },
                         ]}
                         templateName="Printing_Jobs"
-                        onImport={async (rows) => {
+                        onImport={async (rows, onProgress) => {
                             let success = 0, failed = 0;
                             for (const row of rows) {
                                 try {
-                                    if (!row.raw_material_sr_no || !row.size_name || !row.brand_name || !row.bodies_count || !row.sheets_used) { failed++; continue; }
+                                    if (!row.raw_material_sr_no || !row.size_name || !row.brand_name || !row.bodies_count || !row.sheets_used) { failed++; onProgress(success + failed); continue; }
                                     const material = availableMaterials.find(m => m.sr_no === String(row.raw_material_sr_no).trim());
                                     const brand = brands.find(b => b.name.toLowerCase() === String(row.brand_name).toLowerCase().trim());
                                     const size = sizes.find(s => s.name.toLowerCase() === String(row.size_name).toLowerCase().trim());
-                                    if (!material || !brand || !size) { failed++; continue; }
+                                    if (!material || !brand || !size) { failed++; onProgress(success + failed); continue; }
                                     await printingAPI.create({
                                         raw_material_id: material.id,
                                         sizes: [{ size_id: size.id, size_name: size.name, brands: [{ brand_id: brand.id, brand_name: brand.name, bodies_count: parseInt(row.bodies_count), sheets_used: parseInt(row.sheets_used) }] }],
@@ -264,6 +264,7 @@ const Printing = () => {
                                     });
                                     success++;
                                 } catch { failed++; }
+                                onProgress(success + failed);
                             }
                             if (success > 0) fetchData();
                             return { success, failed };

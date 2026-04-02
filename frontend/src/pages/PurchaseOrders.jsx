@@ -144,14 +144,14 @@ const PurchaseOrders = () => {
                             { header: 'Notes', key: 'notes' },
                         ]}
                         templateName="Purchase_Orders"
-                        onImport={async (rows) => {
+                        onImport={async (rows, onProgress) => {
                             let success = 0, failed = 0;
                             for (const row of rows) {
                                 try {
-                                    if (!row.company_name || !row.brand_name || !row.size_name || !row.quantity) { failed++; continue; }
+                                    if (!row.company_name || !row.brand_name || !row.size_name || !row.quantity) { failed++; onProgress(success + failed); continue; }
                                     const brand = brands.find(b => b.name.toLowerCase() === String(row.brand_name).toLowerCase().trim());
                                     const size = sizes.find(s => s.name.toLowerCase() === String(row.size_name).toLowerCase().trim());
-                                    if (!brand || !size) { failed++; continue; }
+                                    if (!brand || !size) { failed++; onProgress(success + failed); continue; }
                                     await purchaseOrdersAPI.create({
                                         date: parseImportDate(row.date) || new Date().toISOString(),
                                         company_name: String(row.company_name).trim(),
@@ -162,6 +162,7 @@ const PurchaseOrders = () => {
                                     });
                                     success++;
                                 } catch { failed++; }
+                                onProgress(success + failed);
                             }
                             if (success > 0) fetchData();
                             return { success, failed };
