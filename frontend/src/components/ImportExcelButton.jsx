@@ -1,24 +1,20 @@
 import React, { useRef, useState } from 'react';
 import { Button } from './ui/button';
 import { Progress } from './ui/progress';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
-import { Upload, FileDown, Loader2, CheckCircle2, XCircle } from 'lucide-react';
+import { Upload, FileDown, Loader2, CheckCircle2, XCircle, X } from 'lucide-react';
 import { importFromExcel, downloadTemplate } from '../lib/importFromExcel';
 import { toast } from 'sonner';
 
 /**
- * Reusable Import Excel button with template download and progress bar.
- * @param {Object} props
- * @param {Array<{header: string, key: string}>} props.columns - Import column definitions
- * @param {string} props.templateName - Name for the template file
- * @param {Function} props.onImport - Async callback receiving (rows, onProgress). onProgress(current, total) updates the bar.
+ * Reusable Import Excel button with template download and non-blocking progress bar.
+ * Progress shows as a fixed bottom banner so user can continue using the panel.
  */
 const ImportExcelButton = ({ columns, templateName, onImport }) => {
     const fileRef = useRef(null);
     const [importing, setImporting] = useState(false);
     const [progress, setProgress] = useState(0);
     const [total, setTotal] = useState(0);
-    const [result, setResult] = useState(null); // { success, failed } or null
+    const [result, setResult] = useState(null);
 
     const handleFileChange = async (e) => {
         const file = e.target.files?.[0];
@@ -34,10 +30,7 @@ const ImportExcelButton = ({ columns, templateName, onImport }) => {
             setProgress(0);
             setResult(null);
 
-            const onProgress = (current) => {
-                setProgress(current);
-            };
-
+            const onProgress = (current) => setProgress(current);
             const importResult = await onImport(rows, onProgress);
             setResult(importResult);
             setProgress(rows.length);
@@ -52,7 +45,7 @@ const ImportExcelButton = ({ columns, templateName, onImport }) => {
         }
     };
 
-    const closeDialog = () => {
+    const dismiss = () => {
         setImporting(false);
         setResult(null);
         setProgress(0);
@@ -82,7 +75,7 @@ const ImportExcelButton = ({ columns, templateName, onImport }) => {
                     className="font-bold uppercase tracking-wider rounded-sm text-xs"
                     data-testid="import-excel-btn"
                 >
-                    <Upload className="w-3.5 h-3.5 mr-1.5" /> Import
+                    <Upload className="w-3.5 h-3.5 mr-1.5" /> {importing ? 'Importing...' : 'Import'}
                 </Button>
                 <input
                     ref={fileRef}
@@ -93,49 +86,43 @@ const ImportExcelButton = ({ columns, templateName, onImport }) => {
                 />
             </div>
 
-            <Dialog open={importing} onOpenChange={(open) => { if (!open && isDone) closeDialog(); }}>
-                <DialogContent className="bg-card border-border rounded-sm max-w-sm">
-                    <DialogHeader>
-                        <DialogTitle className="font-display text-lg font-bold tracking-tight uppercase">
-                            {isDone ? 'Import Complete' : 'Importing Data...'}
-                        </DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-4 py-2">
-                        <Progress value={pct} className="h-3" />
-                        <div className="flex items-center justify-between text-sm">
-                            {!isDone ? (
-                                <>
-                                    <span className="flex items-center gap-2 text-muted-foreground">
-                                        <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                                        Processing row {progress} of {total}
-                                    </span>
-                                    <span className="font-mono font-bold text-primary">{pct}%</span>
-                                </>
-                            ) : (
-                                <div className="flex flex-col gap-2 w-full">
+            {/* Non-blocking fixed bottom progress banner */}
+            {importing && (
+                <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card/95 backdrop-blur-sm shadow-lg" data-testid="import-progress-banner">
+                    <Progress value={pct} className="h-1.5 rounded-none" />
+                    <div className="flex items-center justify-between px-4 py-2.5 max-w-screen-xl mx-auto">
+                        {!isDone ? (
+                            <>
+                                <span className="flex items-center gap-2 text-sm text-muted-foreground">
+                                    <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                                    Importing {progress} of {total} records...
+                                </span>
+                                <span className="font-mono text-sm font-bold text-primary">{pct}%</span>
+                            </>
+                        ) : (
+                            <>
+                                <div className="flex items-center gap-4 text-sm">
                                     {result.success > 0 && (
-                                        <span className="flex items-center gap-2 text-success">
+                                        <span className="flex items-center gap-1.5 text-success">
                                             <CheckCircle2 className="w-4 h-4" />
-                                            {result.success} record(s) imported successfully
+                                            {result.success} imported
                                         </span>
                                     )}
                                     {result.failed > 0 && (
-                                        <span className="flex items-center gap-2 text-destructive">
+                                        <span className="flex items-center gap-1.5 text-destructive">
                                             <XCircle className="w-4 h-4" />
-                                            {result.failed} record(s) failed
+                                            {result.failed} failed
                                         </span>
                                     )}
                                 </div>
-                            )}
-                        </div>
-                        {isDone && (
-                            <Button onClick={closeDialog} className="w-full font-bold uppercase tracking-wider rounded-sm" data-testid="import-done-btn">
-                                Done
-                            </Button>
+                                <Button variant="ghost" size="sm" onClick={dismiss} className="h-7 px-2 text-xs" data-testid="import-dismiss-btn">
+                                    <X className="w-3.5 h-3.5 mr-1" /> Dismiss
+                                </Button>
+                            </>
                         )}
                     </div>
-                </DialogContent>
-            </Dialog>
+                </div>
+            )}
         </>
     );
 };
