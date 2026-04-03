@@ -9,8 +9,10 @@ import { Textarea } from '../components/ui/textarea';
 import ConfirmDialog from '../components/ConfirmDialog';
 import TableSearch from '../components/TableSearch';
 import TablePagination from '../components/TablePagination';
+import SortableHeader from '../components/SortableHeader';
 import { useTableFilter } from '../hooks/useTableFilter';
 import { usePagination } from '../hooks/usePagination';
+import { useTableSort } from '../hooks/useTableSort';
 import { productionAPI, brandsAPI, sizesAPI, dashboardAPI } from '../lib/api';
 
 const EXCLUDED_BRAND_NAMES = ['BOTTOM', 'TOP', 'LID', 'BOTTOM LWBF', 'LID LWBF'];
@@ -28,6 +30,7 @@ const PRODUCTION_EXPORT_COLUMNS = [
     { header: 'Qty Produced', key: 'quantity_produced' },
     { header: 'Notes', key: 'notes', transform: (v) => v || '-' },
     { header: 'Created By', key: 'created_by' },
+    { header: 'Updated By', key: 'updated_by', transform: (v) => v || '-' },
 ];
 
 const emptyForm = {
@@ -63,10 +66,14 @@ const Production = () => {
     ], [dateFrom, dateTo]);
 
     const filteredProduction = useTableFilter({
-        data: visibleProduction, searchTerm, searchFields: ['brand_name', 'size_name'], filters
+        data: visibleProduction, searchTerm, searchFields: ['brand_name', 'size_name', 'created_by'], filters
     });
 
-    const { paginatedData: paginatedProduction, currentPage, totalPages, pageSize, setCurrentPage, setPageSize, startIndex, PAGE_SIZE_OPTIONS } = usePagination({ data: filteredProduction });
+    const { sortedData, sortKey, sortDir, requestSort } = useTableSort({
+        data: filteredProduction, defaultSortKey: 'production_date', defaultSortDir: 'desc'
+    });
+
+    const { paginatedData: paginatedProduction, currentPage, totalPages, pageSize, setCurrentPage, setPageSize, startIndex, PAGE_SIZE_OPTIONS } = usePagination({ data: sortedData });
 
     useEffect(() => { fetchData(); }, []);
 
@@ -270,7 +277,13 @@ const Production = () => {
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="data-table" data-testid="production-table">
-                                <thead><tr><th>#</th><th>Date</th><th>Size</th><th>Brand</th><th>Printing Used</th><th>Qty Produced</th><th>Notes</th><th>By</th><th></th></tr></thead>
+                                <thead><tr><th>#</th>
+                                    <SortableHeader label="Date" sortKey="production_date" currentSortKey={sortKey} currentSortDir={sortDir} onSort={requestSort} />
+                                    <SortableHeader label="Size" sortKey="size_name" currentSortKey={sortKey} currentSortDir={sortDir} onSort={requestSort} />
+                                    <SortableHeader label="Brand" sortKey="brand_name" currentSortKey={sortKey} currentSortDir={sortDir} onSort={requestSort} />
+                                    <SortableHeader label="Printing Used" sortKey="printing_stock_used" currentSortKey={sortKey} currentSortDir={sortDir} onSort={requestSort} />
+                                    <SortableHeader label="Qty Produced" sortKey="quantity_produced" currentSortKey={sortKey} currentSortDir={sortDir} onSort={requestSort} />
+                                    <th>Notes</th><th>By</th><th>Updated By</th><th></th></tr></thead>
                                 <tbody>
                                     {paginatedProduction.map((entry, idx) => (
                                         <tr key={entry.id} data-testid={`production-row-${entry.id}`}>
@@ -282,6 +295,7 @@ const Production = () => {
                                             <td className="font-mono text-success font-bold">{formatNumber(entry.quantity_produced)}</td>
                                             <td className="max-w-xs truncate text-muted-foreground">{entry.notes || '-'}</td>
                                             <td className="text-muted-foreground">{entry.created_by}</td>
+                                            <td className="text-muted-foreground">{entry.updated_by || '-'}</td>
                                             <td>
                                                 <div className="flex gap-1">
                                                     <Button variant="ghost" size="icon" onClick={() => openEdit(entry)} className="text-muted-foreground hover:text-primary"><Pencil className="w-4 h-4" /></Button>

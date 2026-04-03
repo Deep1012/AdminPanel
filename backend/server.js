@@ -16,6 +16,7 @@ const purchaseOrderRoutes = require("./routes/purchaseOrders");
 const customerRoutes = require("./routes/customers");
 const adminRoutes = require("./routes/admin");
 const menuItemRoutes = require("./routes/menuItems");
+const backupRoutes = require("./routes/backup");
 
 const app = express();
 const PORT = process.env.PORT || 8001;
@@ -25,7 +26,7 @@ app.use(cors({
   origin: process.env.CORS_ORIGINS === "*" ? "*" : process.env.CORS_ORIGINS.split(","),
   credentials: true,
 }));
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
 
 // Routes
 app.use("/api/auth", authRoutes);
@@ -41,6 +42,7 @@ app.use("/api/purchase-orders", purchaseOrderRoutes);
 app.use("/api/customers", customerRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/menu-items", menuItemRoutes);
+app.use("/api/backups", backupRoutes);
 
 // Health check
 app.get("/api", (req, res) => {
@@ -51,11 +53,24 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "healthy" });
 });
 
-// Keep-alive: self-ping every 14 minutes to prevent Render free tier spin-down
+// Cron jobs
 const cron = require("node-cron");
 const RENDER_URL = process.env.RENDER_EXTERNAL_URL || "https://timestin-crm-backend.onrender.com";
+
+// Keep-alive: self-ping every 14 minutes to prevent Render free tier spin-down
 cron.schedule("*/14 * * * *", () => {
   fetch(`${RENDER_URL}/api/health`).catch(() => {});
+});
+
+// Monthly data backup - runs at midnight on the 1st of every month
+const { createBackup } = require("./routes/backup");
+cron.schedule("0 0 1 * *", async () => {
+  try {
+    const backup = await createBackup(null);
+    console.log(`[CRON] Monthly backup created: ${backup.id} (${(backup.size_bytes / 1024).toFixed(1)} KB)`);
+  } catch (err) {
+    console.error("[CRON] Monthly backup failed:", err.message);
+  }
 });
 
 // Start server

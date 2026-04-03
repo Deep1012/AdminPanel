@@ -10,8 +10,10 @@ import { Textarea } from '../components/ui/textarea';
 import ConfirmDialog from '../components/ConfirmDialog';
 import TableSearch from '../components/TableSearch';
 import TablePagination from '../components/TablePagination';
+import SortableHeader from '../components/SortableHeader';
 import { useTableFilter } from '../hooks/useTableFilter';
 import { usePagination } from '../hooks/usePagination';
+import { useTableSort } from '../hooks/useTableSort';
 import { purchaseOrdersAPI, brandsAPI, sizesAPI, customersAPI } from '../lib/api';
 import SearchableSelect from '../components/SearchableSelect';
 import { formatDate, formatNumber, parseImportDate } from '../lib/utils';
@@ -29,6 +31,7 @@ const PO_EXPORT_COLUMNS = [
     { header: 'Quantity', key: 'quantity' },
     { header: 'Dispatched', key: 'quantity_dispatched' },
     { header: 'Created By', key: 'created_by' },
+    { header: 'Updated By', key: 'updated_by', transform: (v) => v || '-' },
 ];
 
 const emptyForm = {
@@ -58,10 +61,14 @@ const PurchaseOrders = () => {
     ], [dateFrom, dateTo]);
 
     const filteredOrders = useTableFilter({
-        data: orders, searchTerm, searchFields: ['serial_no', 'company_name'], filters
+        data: orders, searchTerm, searchFields: ['serial_no', 'company_name', 'brand_name', 'size_name'], filters
     });
 
-    const { paginatedData: paginatedOrders, currentPage, totalPages, pageSize, setCurrentPage, setPageSize, startIndex, PAGE_SIZE_OPTIONS } = usePagination({ data: filteredOrders });
+    const { sortedData, sortKey, sortDir, requestSort } = useTableSort({
+        data: filteredOrders, defaultSortKey: 'date', defaultSortDir: 'desc'
+    });
+
+    const { paginatedData: paginatedOrders, currentPage, totalPages, pageSize, setCurrentPage, setPageSize, startIndex, PAGE_SIZE_OPTIONS } = usePagination({ data: sortedData });
 
     useEffect(() => { fetchData(); }, []);
 
@@ -257,7 +264,13 @@ const PurchaseOrders = () => {
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="data-table" data-testid="po-table">
-                                <thead><tr><th>#</th><th>Date</th><th>Company</th><th>Brand</th><th>Size</th><th>Qty</th><th>Dispatched</th><th>By</th><th></th></tr></thead>
+                                <thead><tr><th>#</th>
+                                    <SortableHeader label="Date" sortKey="date" currentSortKey={sortKey} currentSortDir={sortDir} onSort={requestSort} />
+                                    <SortableHeader label="Company" sortKey="company_name" currentSortKey={sortKey} currentSortDir={sortDir} onSort={requestSort} />
+                                    <SortableHeader label="Brand" sortKey="brand_name" currentSortKey={sortKey} currentSortDir={sortDir} onSort={requestSort} />
+                                    <th>Size</th>
+                                    <SortableHeader label="Qty" sortKey="quantity" currentSortKey={sortKey} currentSortDir={sortDir} onSort={requestSort} />
+                                    <th>Dispatched</th><th>By</th><th>Updated By</th><th></th></tr></thead>
                                 <tbody>
                                     {paginatedOrders.map((po, idx) => (
                                         <tr key={po.id} data-testid={`po-row-${po.id}`}>
@@ -282,6 +295,7 @@ const PurchaseOrders = () => {
                                                 </div>
                                             </td>
                                             <td className="text-muted-foreground">{po.created_by}</td>
+                                            <td className="text-muted-foreground">{po.updated_by || '-'}</td>
                                             <td>
                                                 <div className="flex gap-1">
                                                     <Button variant="ghost" size="icon" onClick={() => openEdit(po)} className="text-muted-foreground hover:text-primary"><Pencil className="w-4 h-4" /></Button>

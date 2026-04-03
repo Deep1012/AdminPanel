@@ -15,6 +15,11 @@ const purchaseSchema = new mongoose.Schema({
   invoice_number: { type: String, default: null },
   purchase_date: { type: String, required: true },
   created_by: { type: String, required: true },
+  updated_by: { type: String, default: null },
+  updated_at: { type: String, default: null },
 });
+
+purchaseSchema.index({ purchase_date: -1 });
+purchaseSchema.index({ sr_no: -1 });
 
 module.exports = mongoose.model("Purchase", purchaseSchema);

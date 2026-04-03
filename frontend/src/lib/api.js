@@ -97,6 +97,8 @@ export const customersAPI = {
 
 export const adminAPI = {
     clearOperationalData: () => api.post('/admin/clear-operational-data'),
+    getActivityLogs: (params) => api.get('/admin/activity-logs', { params }),
+    getActivityLogStats: () => api.get('/admin/activity-logs/stats'),
 };
 
 export const menuItemsAPI = {
@@ -117,6 +119,14 @@ export const dashboardAPI = {
     getDispatchDistribution: () => api.get('/dashboard/dispatch-distribution'),
     getRecentActivity: () => api.get('/dashboard/recent-activity'),
     getPOSummary: () => api.get('/dashboard/po-summary'),
+    getExportAll: () => api.get('/dashboard/export-all'),
+};
+
+export const backupsAPI = {
+    getAll: () => api.get('/backups'),
+    create: () => api.post('/backups'),
+    get: (id) => api.get(`/backups/${id}`),
+    delete: (id) => api.delete(`/backups/${id}`),
 };
 
 export default api;

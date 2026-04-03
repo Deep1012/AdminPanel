@@ -3,6 +3,7 @@ const { v4: uuidv4 } = require("uuid");
 const PurchaseOrder = require("../models/PurchaseOrder");
 const Dispatch = require("../models/Dispatch");
 const { authenticate } = require("../middleware/auth");
+const { logActivity } = require("../lib/activityLogger");
 
 const router = express.Router();
 
@@ -67,6 +68,8 @@ router.post("/", authenticate, async (req, res) => {
       created_at: now,
     });
 
+    logActivity({ action: "CREATE", entity_type: "purchase_order", entity_id: id, entity_label: serial_no, user: req.user, details: `Created PO ${serial_no} for ${company_name} (${brand_name} ${size_name} x${quantity})`, ip_address: req.ip });
+
     res.json(order.toObject({ versionKey: false }));
   } catch (error) {
     if (error.code === 11000) {
@@ -86,7 +89,10 @@ router.put("/:poId", authenticate, async (req, res) => {
       return res.status(404).json({ detail: "Purchase order not found" });
     }
 
-    const updateData = {};
+    const updateData = {
+      updated_by: req.user.username,
+      updated_at: new Date().toISOString(),
+    };
     if (date !== undefined) updateData.date = date;
     if (company_name !== undefined) updateData.company_name = company_name;
     if (brand_id !== undefined) updateData.brand_id = brand_id;
@@ -102,11 +108,10 @@ router.put("/:poId", authenticate, async (req, res) => {
     }
     if (notes !== undefined) updateData.notes = notes;
 
-    if (Object.keys(updateData).length === 0) {
-      return res.status(400).json({ detail: "No fields to update" });
-    }
-
     await PurchaseOrder.updateOne({ id: req.params.poId }, { $set: updateData }, { runValidators: true });
+
+    logActivity({ action: "UPDATE", entity_type: "purchase_order", entity_id: req.params.poId, entity_label: existingPO.serial_no, user: req.user, details: `Updated PO ${existingPO.serial_no}`, ip_address: req.ip });
+
     const updatedPO = await PurchaseOrder.findOne({ id: req.params.poId }, { _id: 0, __v: 0 }).lean();
     res.json(updatedPO);
   } catch (error) {
@@ -127,6 +132,9 @@ router.delete("/:poId", authenticate, async (req, res) => {
     );
 
     await PurchaseOrder.deleteOne({ id: req.params.poId });
+
+    logActivity({ action: "DELETE", entity_type: "purchase_order", entity_id: req.params.poId, entity_label: po.serial_no, user: req.user, details: `Deleted PO ${po.serial_no}`, ip_address: req.ip });
+
     res.json({ message: "Purchase order deleted successfully" });
   } catch (error) {
     res.status(500).json({ detail: error.message });

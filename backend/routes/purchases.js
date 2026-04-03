@@ -3,6 +3,7 @@ const { v4: uuidv4 } = require("uuid");
 const Purchase = require("../models/Purchase");
 const PrintingJob = require("../models/PrintingJob");
 const { authenticate } = require("../middleware/auth");
+const { logActivity } = require("../lib/activityLogger");
 
 const router = express.Router();
 
@@ -49,6 +50,8 @@ router.post("/", authenticate, async (req, res) => {
       created_by: req.user.username,
     });
 
+    logActivity({ action: "CREATE", entity_type: "purchase", entity_id: id, entity_label: sr_no, user: req.user, details: `Added raw material ${sr_no} (${weight}kg)`, ip_address: req.ip });
+
     res.json(purchase.toObject({ versionKey: false }));
   } catch (error) {
     res.status(500).json({ detail: error.message });
@@ -57,14 +60,13 @@ router.post("/", authenticate, async (req, res) => {
 
 router.get("/", authenticate, async (req, res) => {
   try {
-    const purchases = await Purchase.find({}, { _id: 0, __v: 0 }).sort({ purchase_date: -1 });
+    const purchases = await Purchase.find({}, { _id: 0, __v: 0 }).sort({ purchase_date: -1 }).lean();
     const result = purchases.map((p) => {
-      const obj = p.toObject();
-      if (obj.sheets_used === undefined) obj.sheets_used = 0;
-      if (obj.sheets_available === undefined) {
-        obj.sheets_available = (obj.no_of_sheets || 0) - (obj.sheets_used || 0);
+      if (p.sheets_used === undefined) p.sheets_used = 0;
+      if (p.sheets_available === undefined) {
+        p.sheets_available = (p.no_of_sheets || 0) - (p.sheets_used || 0);
       }
-      return obj;
+      return p;
     });
     res.json(result);
   } catch (error) {
@@ -74,7 +76,11 @@ router.get("/", authenticate, async (req, res) => {
 
 router.get("/available", authenticate, async (req, res) => {
   try {
-    const purchases = await Purchase.find({}, { _id: 0, __v: 0 }).sort({ purchase_date: -1 });
+    const purchases = await Purchase.find(
+      {},
+      { id: 1, sr_no: 1, gauge: 1, size1: 1, size2: 1, temper: 1, no_of_sheets: 1, sheets_used: 1, weight: 1, _id: 0 }
+    ).sort({ purchase_date: -1 }).lean();
+
     const available = [];
     for (const p of purchases) {
       const sheets_used = p.sheets_used || 0;
@@ -104,7 +110,10 @@ router.get("/available", authenticate, async (req, res) => {
 router.put("/:purchaseId", authenticate, async (req, res) => {
   try {
     const { sr_no, gauge, size1, size2, temper, weight, supplier, invoice_number, purchase_date } = req.body;
-    const updateData = {};
+    const updateData = {
+      updated_by: req.user.username,
+      updated_at: new Date().toISOString(),
+    };
     if (sr_no !== undefined) updateData.sr_no = sr_no;
     if (temper !== undefined) updateData.temper = temper;
     if (supplier !== undefined) updateData.supplier = supplier;
@@ -132,12 +141,11 @@ router.put("/:purchaseId", authenticate, async (req, res) => {
       updateData.sheets_available = no_of_sheets - (existing.sheets_used || 0);
     }
 
-    if (Object.keys(updateData).length === 0) {
-      return res.status(400).json({ detail: "No fields to update" });
-    }
-
     const result = await Purchase.updateOne({ id: req.params.purchaseId }, { $set: updateData });
     if (result.matchedCount === 0) return res.status(404).json({ detail: "Purchase not found" });
+
+    logActivity({ action: "UPDATE", entity_type: "purchase", entity_id: req.params.purchaseId, user: req.user, details: `Updated raw material entry`, ip_address: req.ip });
+
     res.json({ message: "Purchase updated successfully" });
   } catch (error) {
     res.status(500).json({ detail: error.message });
@@ -152,10 +160,14 @@ router.delete("/:purchaseId", authenticate, async (req, res) => {
       return res.status(400).json({ detail: `Cannot delete: ${linkedJobs} printing job(s) linked to this raw material. Delete them first.` });
     }
 
+    const existing = await Purchase.findOne({ id: req.params.purchaseId }, { sr_no: 1 }).lean();
     const result = await Purchase.deleteOne({ id: req.params.purchaseId });
     if (result.deletedCount === 0) {
       return res.status(404).json({ detail: "Purchase not found" });
     }
+
+    logActivity({ action: "DELETE", entity_type: "purchase", entity_id: req.params.purchaseId, entity_label: existing?.sr_no, user: req.user, details: `Deleted raw material ${existing?.sr_no || ""}`, ip_address: req.ip });
+
     res.json({ message: "Purchase deleted successfully" });
   } catch (error) {
     res.status(500).json({ detail: error.message });

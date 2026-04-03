@@ -3,6 +3,7 @@ const { v4: uuidv4 } = require("uuid");
 const Production = require("../models/Production");
 const Brand = require("../models/Brand");
 const { authenticate } = require("../middleware/auth");
+const { logActivity } = require("../lib/activityLogger");
 
 const CASCADING_BRAND_NAMES = ["BOTTOM", "TOP", "LID"];
 const LWBF_CASCADING_BRAND_NAMES = ["BOTTOM LWBF", "LID LWBF"];
@@ -85,6 +86,8 @@ router.post("/", authenticate, async (req, res) => {
       }
     }
 
+    logActivity({ action: "CREATE", entity_type: "production", entity_id: id, entity_label: `${brand_name} ${size_name}`, user: req.user, details: `Produced ${quantity_produced} units of ${brand_name} ${size_name}`, ip_address: req.ip });
+
     res.json(entry.toObject({ versionKey: false }));
   } catch (error) {
     res.status(500).json({ detail: error.message });
@@ -93,11 +96,10 @@ router.post("/", authenticate, async (req, res) => {
 
 router.get("/", authenticate, async (req, res) => {
   try {
-    const entries = await Production.find({}, { _id: 0, __v: 0 }).sort({ production_date: -1 });
+    const entries = await Production.find({}, { _id: 0, __v: 0 }).sort({ production_date: -1 }).lean();
     const result = entries.map((e) => {
-      const obj = e.toObject();
-      if (obj.printing_stock_used === undefined) obj.printing_stock_used = 0;
-      return obj;
+      if (e.printing_stock_used === undefined) e.printing_stock_used = 0;
+      return e;
     });
     res.json(result);
   } catch (error) {
@@ -108,7 +110,10 @@ router.get("/", authenticate, async (req, res) => {
 router.put("/:prodId", authenticate, async (req, res) => {
   try {
     const { brand_id, brand_name, size_id, size_name, quantity_produced, printing_stock_used, notes, production_date } = req.body;
-    const updateData = {};
+    const updateData = {
+      updated_by: req.user.username,
+      updated_at: new Date().toISOString(),
+    };
     if (brand_id !== undefined) updateData.brand_id = brand_id;
     if (brand_name !== undefined) updateData.brand_name = brand_name;
     if (size_id !== undefined) updateData.size_id = size_id;
@@ -117,10 +122,6 @@ router.put("/:prodId", authenticate, async (req, res) => {
     if (printing_stock_used !== undefined) updateData.printing_stock_used = printing_stock_used;
     if (notes !== undefined) updateData.notes = notes;
     if (production_date !== undefined) updateData.production_date = production_date;
-
-    if (Object.keys(updateData).length === 0) {
-      return res.status(400).json({ detail: "No fields to update" });
-    }
 
     const result = await Production.updateOne({ id: req.params.prodId }, { $set: updateData });
     if (result.matchedCount === 0) return res.status(404).json({ detail: "Production entry not found" });
@@ -138,6 +139,8 @@ router.put("/:prodId", authenticate, async (req, res) => {
       await Production.updateMany({ parent_production_id: req.params.prodId }, { $set: cascadeUpdate });
     }
 
+    logActivity({ action: "UPDATE", entity_type: "production", entity_id: req.params.prodId, user: req.user, details: `Updated production entry`, ip_address: req.ip });
+
     res.json({ message: "Production entry updated successfully" });
   } catch (error) {
     res.status(500).json({ detail: error.message });
@@ -153,6 +156,8 @@ router.delete("/:prodId", authenticate, async (req, res) => {
     const deleteResult = await Production.deleteMany({
       $or: [{ id: req.params.prodId }, { parent_production_id: req.params.prodId }]
     });
+
+    logActivity({ action: "DELETE", entity_type: "production", entity_id: req.params.prodId, entity_label: `${entry.brand_name} ${entry.size_name}`, user: req.user, details: `Deleted ${deleteResult.deletedCount} production entry(s) for ${entry.brand_name} ${entry.size_name}`, ip_address: req.ip });
 
     res.json({ message: `Deleted ${deleteResult.deletedCount} production entry(s)` });
   } catch (error) {

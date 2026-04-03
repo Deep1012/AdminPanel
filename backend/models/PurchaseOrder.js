@@ -15,10 +15,13 @@ const purchaseOrderSchema = new mongoose.Schema(
     notes: { type: String, default: null },
     created_by: { type: String, required: true },
     created_at: { type: String, required: true },
+    updated_by: { type: String, default: null },
+    updated_at: { type: String, default: null },
   },
   { collection: "purchaseorders" }
 );
 
 purchaseOrderSchema.index({ date: -1 });
+purchaseOrderSchema.index({ brand_id: 1, size_id: 1, company_name: 1 });
 
 module.exports = mongoose.model("PurchaseOrder", purchaseOrderSchema);

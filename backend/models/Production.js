@@ -13,6 +13,12 @@ const productionSchema = new mongoose.Schema({
   notes: { type: String, default: null },
   production_date: { type: String, required: true },
   created_by: { type: String, required: true },
+  updated_by: { type: String, default: null },
+  updated_at: { type: String, default: null },
 });
+
+productionSchema.index({ production_date: -1 });
+productionSchema.index({ parent_production_id: 1 });
+productionSchema.index({ brand_name: 1, size_name: 1 });
 
 module.exports = mongoose.model("Production", productionSchema);

@@ -10,12 +10,13 @@ const router = express.Router();
 
 router.get("/stats", authenticate, async (req, res) => {
   try {
+    // Use lean() and minimal projections for performance
     const [purchases, printingJobs, production, dispatches, purchaseOrders] = await Promise.all([
-      Purchase.find({}, { _id: 0, __v: 0 }).lean(),
-      PrintingJob.find({}, { _id: 0, __v: 0 }).lean(),
-      Production.find({}, { _id: 0, __v: 0 }).lean(),
-      Dispatch.find({}, { _id: 0, __v: 0 }).lean(),
-      PurchaseOrder.find({}, { _id: 0, __v: 0 }).lean(),
+      Purchase.find({}, { no_of_sheets: 1, sheets_used: 1, weight: 1, purchase_date: 1, _id: 0 }).lean(),
+      PrintingJob.find({}, { total_bodies: 1, sheets_from_material: 1, job_date: 1, _id: 0 }).lean(),
+      Production.find({}, { quantity_produced: 1, printing_stock_used: 1, production_date: 1, _id: 0 }).lean(),
+      Dispatch.find({}, { total_quantity: 1, quantity: 1, dispatch_date: 1, _id: 0 }).lean(),
+      PurchaseOrder.find({}, { quantity: 1, quantity_dispatched: 1, date: 1, _id: 0 }).lean(),
     ]);
 
     const total_sheets = purchases.reduce((sum, p) => sum + (p.no_of_sheets || 0), 0);
@@ -237,11 +238,13 @@ router.get("/po-summary", authenticate, async (req, res) => {
     const allOrders = await PurchaseOrder.find(
       {},
       { _id: 0, __v: 0 }
-    ).sort({ date: -1 }).lean();
+    ).sort({ date: -1 }).limit(5).lean();
+
+    const total_count = await PurchaseOrder.countDocuments();
 
     res.json({
-      total_count: allOrders.length,
-      latest: allOrders.slice(0, 5),
+      total_count,
+      latest: allOrders,
     });
   } catch (error) {
     res.status(500).json({ detail: error.message });
@@ -251,8 +254,11 @@ router.get("/po-summary", authenticate, async (req, res) => {
 // Keep legacy endpoints
 router.get("/printing-stock-list", authenticate, async (req, res) => {
   try {
-    const jobs = await PrintingJob.find({}, { _id: 0, __v: 0 }).lean();
-    const production = await Production.find({}, { _id: 0, __v: 0 }).lean();
+    const [jobs, production] = await Promise.all([
+      PrintingJob.find({}, { sizes: 1, sheets_from_material: 1, _id: 0 }).lean(),
+      Production.find({}, { size_name: 1, brand_name: 1, printing_stock_used: 1, _id: 0 }).lean(),
+    ]);
+
     const stockMap = {};
     for (const job of jobs) {
       const jobSheets = job.sheets_from_material || 0;
@@ -279,8 +285,11 @@ router.get("/printing-stock-list", authenticate, async (req, res) => {
 
 router.get("/finished-goods-list", authenticate, async (req, res) => {
   try {
-    const production = await Production.find({}, { _id: 0, __v: 0 }).lean();
-    const dispatches = await Dispatch.find({}, { _id: 0, __v: 0 }).lean();
+    const [production, dispatches] = await Promise.all([
+      Production.find({}, { size_name: 1, brand_name: 1, quantity_produced: 1, _id: 0 }).lean(),
+      Dispatch.find({}, { items: 1, size_name: 1, brand_name: 1, quantity: 1, _id: 0 }).lean(),
+    ]);
+
     const stockMap = {};
     for (const p of production) {
       const key = `${p.size_name || ""}_${p.brand_name || ""}`;
@@ -296,6 +305,24 @@ router.get("/finished-goods-list", authenticate, async (req, res) => {
     }
     for (const key of Object.keys(stockMap)) stockMap[key].available = stockMap[key].produced - stockMap[key].dispatched;
     res.json(Object.values(stockMap));
+  } catch (error) {
+    res.status(500).json({ detail: error.message });
+  }
+});
+
+// Global export - return all exportable data in one call
+router.get("/export-all", authenticate, async (req, res) => {
+  try {
+    const [purchases, printingJobs, production, dispatches, purchaseOrders, customers] = await Promise.all([
+      Purchase.find({}, { _id: 0, __v: 0 }).sort({ purchase_date: -1 }).lean(),
+      PrintingJob.find({}, { _id: 0, __v: 0 }).sort({ job_date: -1 }).lean(),
+      Production.find({}, { _id: 0, __v: 0 }).sort({ production_date: -1 }).lean(),
+      Dispatch.find({}, { _id: 0, __v: 0 }).sort({ dispatch_date: -1 }).lean(),
+      PurchaseOrder.find({}, { _id: 0, __v: 0 }).sort({ date: -1 }).lean(),
+      require("../models/Customer").find({}, { _id: 0, __v: 0 }).sort({ name: 1 }).lean(),
+    ]);
+
+    res.json({ purchases, printingJobs, production, dispatches, purchaseOrders, customers });
   } catch (error) {
     res.status(500).json({ detail: error.message });
   }

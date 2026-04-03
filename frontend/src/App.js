@@ -18,6 +18,7 @@ import RawMaterialStock from './pages/RawMaterialStock';
 import PrintingStock from './pages/PrintingStock';
 import FinishedGoods from './pages/FinishedGoods';
 import MenuManagement from './pages/MenuManagement';
+import ActivityLogs from './pages/ActivityLogs';
 import './App.css';
 
 // Protected Route component
@@ -133,6 +134,11 @@ function AppRoutes() {
             <Route path="/menu-management" element={
                 <ProtectedRoute adminOnly>
                     <MenuManagement />
+                </ProtectedRoute>
+            } />
+            <Route path="/activity-logs" element={
+                <ProtectedRoute adminOnly>
+                    <ActivityLogs />
                 </ProtectedRoute>
             } />
             <Route path="/admin" element={

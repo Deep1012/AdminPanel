@@ -10,8 +10,10 @@ import { Textarea } from '../components/ui/textarea';
 import ConfirmDialog from '../components/ConfirmDialog';
 import TableSearch from '../components/TableSearch';
 import TablePagination from '../components/TablePagination';
+import SortableHeader from '../components/SortableHeader';
 import { useTableFilter } from '../hooks/useTableFilter';
 import { usePagination } from '../hooks/usePagination';
+import { useTableSort } from '../hooks/useTableSort';
 import { printingAPI, brandsAPI, sizesAPI, purchaseAPI } from '../lib/api';
 import { formatDate, formatNumber, parseImportDate } from '../lib/utils';
 import { Plus, Trash2, Pencil, Printer, Loader2, AlertCircle, Layers, Download } from 'lucide-react';
@@ -83,6 +85,7 @@ const Printing = () => {
                         bodies_count: brand.bodies_count || 0,
                         total_printing: (brand.bodies_count || 0) * jobSheets,
                         created_by: job.created_by,
+                        updated_by: job.updated_by,
                         notes: job.notes,
                     });
                 }
@@ -92,10 +95,14 @@ const Printing = () => {
     }, [jobs]);
 
     const filteredJobs = useTableFilter({
-        data: flattenedRows, searchTerm, searchFields: ['job_number', 'raw_material_sr_no', 'size_name', 'brand_name'], filters
+        data: flattenedRows, searchTerm, searchFields: ['job_number', 'raw_material_sr_no', 'size_name', 'brand_name', 'created_by'], filters
     });
 
-    const { paginatedData: paginatedJobs, currentPage, totalPages, pageSize, setCurrentPage, setPageSize, startIndex, PAGE_SIZE_OPTIONS } = usePagination({ data: filteredJobs });
+    const { sortedData, sortKey, sortDir, requestSort } = useTableSort({
+        data: filteredJobs, defaultSortKey: 'job_date', defaultSortDir: 'desc'
+    });
+
+    const { paginatedData: paginatedJobs, currentPage, totalPages, pageSize, setCurrentPage, setPageSize, startIndex, PAGE_SIZE_OPTIONS } = usePagination({ data: sortedData });
 
     useEffect(() => { fetchData(); }, []);
 
@@ -448,7 +455,16 @@ const Printing = () => {
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="data-table" data-testid="jobs-table">
-                                <thead><tr><th>#</th><th>Date</th><th>Job #</th><th>Raw Material</th><th>Material Size</th><th>Sheets</th><th>Size</th><th>Brand</th><th>Bodies</th><th>Total Printing</th><th>By</th><th></th></tr></thead>
+                                <thead><tr><th>#</th>
+                                    <SortableHeader label="Date" sortKey="job_date" currentSortKey={sortKey} currentSortDir={sortDir} onSort={requestSort} />
+                                    <SortableHeader label="Job #" sortKey="job_number" currentSortKey={sortKey} currentSortDir={sortDir} onSort={requestSort} />
+                                    <th>Raw Material</th><th>Material Size</th>
+                                    <SortableHeader label="Sheets" sortKey="sheets_from_material" currentSortKey={sortKey} currentSortDir={sortDir} onSort={requestSort} />
+                                    <th>Size</th>
+                                    <SortableHeader label="Brand" sortKey="brand_name" currentSortKey={sortKey} currentSortDir={sortDir} onSort={requestSort} />
+                                    <SortableHeader label="Bodies" sortKey="bodies_count" currentSortKey={sortKey} currentSortDir={sortDir} onSort={requestSort} />
+                                    <SortableHeader label="Total Printing" sortKey="total_printing" currentSortKey={sortKey} currentSortDir={sortDir} onSort={requestSort} />
+                                    <th>By</th><th>Updated By</th><th></th></tr></thead>
                                 <tbody>
                                     {paginatedJobs.map((row, idx) => (
                                         <tr key={row._rowKey} data-testid={`job-row-${row._rowKey}`}>
@@ -463,6 +479,7 @@ const Printing = () => {
                                             <td className="font-mono">{formatNumber(row.bodies_count)}</td>
                                             <td className="font-mono text-primary font-bold">{formatNumber(row.total_printing)}</td>
                                             <td className="text-muted-foreground">{row.created_by}</td>
+                                            <td className="text-muted-foreground">{row.updated_by || '-'}</td>
                                             <td>
                                                 <div className="flex gap-1">
                                                     <Button variant="ghost" size="icon" onClick={() => openEdit(row)} className="text-muted-foreground hover:text-primary"><Pencil className="w-4 h-4" /></Button>

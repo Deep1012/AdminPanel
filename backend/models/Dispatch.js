@@ -17,6 +17,12 @@ const dispatchSchema = new mongoose.Schema({
   notes: { type: String, default: null },
   dispatch_date: { type: String, required: true },
   created_by: { type: String, required: true },
+  updated_by: { type: String, default: null },
+  updated_at: { type: String, default: null },
 });
+
+dispatchSchema.index({ dispatch_date: -1 });
+dispatchSchema.index({ order_number: -1 });
+dispatchSchema.index({ purchase_order_id: 1 });
 
 module.exports = mongoose.model("Dispatch", dispatchSchema);

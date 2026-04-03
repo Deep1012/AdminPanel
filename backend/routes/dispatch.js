@@ -3,6 +3,7 @@ const { v4: uuidv4 } = require("uuid");
 const Dispatch = require("../models/Dispatch");
 const PurchaseOrder = require("../models/PurchaseOrder");
 const { authenticate } = require("../middleware/auth");
+const { logActivity } = require("../lib/activityLogger");
 
 const router = express.Router();
 
@@ -116,6 +117,8 @@ router.post("/", authenticate, async (req, res) => {
       }
     }
 
+    logActivity({ action: "CREATE", entity_type: "dispatch", entity_id: id, entity_label: order_number, user: req.user, details: `Dispatched ${total_quantity} units to ${customer_name}`, ip_address: req.ip });
+
     res.json(normalizeDispatch(entry));
   } catch (error) {
     res.status(500).json({ detail: error.message });
@@ -205,6 +208,8 @@ router.put("/:dispatchId", authenticate, async (req, res) => {
       size_name: newItems[0].size_name,
       quantity: total_quantity,
       purchase_order_id: newItems[0].purchase_order_id,
+      updated_by: req.user.username,
+      updated_at: new Date().toISOString(),
     };
     if (notes !== undefined) updateData.notes = notes;
     if (customer_name !== undefined) updateData.customer_name = customer_name;
@@ -221,6 +226,8 @@ router.put("/:dispatchId", authenticate, async (req, res) => {
         );
       }
     }
+
+    logActivity({ action: "UPDATE", entity_type: "dispatch", entity_id: req.params.dispatchId, entity_label: oldDispatch.order_number, user: req.user, details: `Updated dispatch ${oldDispatch.order_number}`, ip_address: req.ip });
 
     const updated = await Dispatch.findOne({ id: req.params.dispatchId }, { _id: 0, __v: 0 }).lean();
     res.json(normalizeDispatch(updated));
@@ -246,6 +253,9 @@ router.delete("/:dispatchId", authenticate, async (req, res) => {
     }
 
     await Dispatch.deleteOne({ id: req.params.dispatchId });
+
+    logActivity({ action: "DELETE", entity_type: "dispatch", entity_id: req.params.dispatchId, entity_label: dispatch.order_number, user: req.user, details: `Deleted dispatch ${dispatch.order_number}`, ip_address: req.ip });
+
     res.json({ message: "Dispatch deleted successfully" });
   } catch (error) {
     res.status(500).json({ detail: error.message });

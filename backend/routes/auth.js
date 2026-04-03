@@ -4,6 +4,7 @@ const jwt = require("jsonwebtoken");
 const { v4: uuidv4 } = require("uuid");
 const User = require("../models/User");
 const { authenticate } = require("../middleware/auth");
+const { logActivity } = require("../lib/activityLogger");
 
 const router = express.Router();
 
@@ -11,7 +12,7 @@ router.post("/register", async (req, res) => {
   try {
     const { username, email, password, role = "user" } = req.body;
 
-    const existing = await User.findOne({ email });
+    const existing = await User.findOne({ email }).lean();
     if (existing) {
       return res.status(400).json({ detail: "Email already registered" });
     }
@@ -61,6 +62,8 @@ router.post("/login", async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: "24h" }
     );
+
+    logActivity({ action: "LOGIN", entity_type: "auth", entity_id: user.id, entity_label: user.username, user: { id: user.id, username: user.username }, details: `User "${user.username}" logged in`, ip_address: req.ip });
 
     res.json({
       token,

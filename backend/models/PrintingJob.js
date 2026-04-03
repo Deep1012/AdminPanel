@@ -14,6 +14,12 @@ const printingJobSchema = new mongoose.Schema({
   notes: { type: String, default: null },
   job_date: { type: String, required: true },
   created_by: { type: String, required: true },
+  updated_by: { type: String, default: null },
+  updated_at: { type: String, default: null },
 });
+
+printingJobSchema.index({ job_date: -1 });
+printingJobSchema.index({ raw_material_id: 1 });
+printingJobSchema.index({ job_number: -1 });
 
 module.exports = mongoose.model("PrintingJob", printingJobSchema);

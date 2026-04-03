@@ -9,8 +9,10 @@ import { Badge } from '../components/ui/badge';
 import ConfirmDialog from '../components/ConfirmDialog';
 import TableSearch from '../components/TableSearch';
 import TablePagination from '../components/TablePagination';
+import SortableHeader from '../components/SortableHeader';
 import { useTableFilter } from '../hooks/useTableFilter';
 import { usePagination } from '../hooks/usePagination';
+import { useTableSort } from '../hooks/useTableSort';
 import { dispatchAPI, brandsAPI, sizesAPI, customersAPI, purchaseOrdersAPI } from '../lib/api';
 import SearchableSelect from '../components/SearchableSelect';
 import { formatDate, formatNumber, parseImportDate } from '../lib/utils';
@@ -27,6 +29,7 @@ const DISPATCH_EXPORT_COLUMNS = [
     { header: 'Size', key: 'size_name' },
     { header: 'Quantity', key: 'quantity' },
     { header: 'Created By', key: 'created_by' },
+    { header: 'Updated By', key: 'updated_by', transform: (v) => v || '-' },
 ];
 
 const Dispatch = () => {
@@ -86,10 +89,14 @@ const Dispatch = () => {
     }, [dispatches]);
 
     const filteredDispatches = useTableFilter({
-        data: flattenedRows, searchTerm, searchFields: ['order_number', 'customer_name', 'brand_name'], filters
+        data: flattenedRows, searchTerm, searchFields: ['order_number', 'customer_name', 'brand_name', 'size_name', 'created_by'], filters
     });
 
-    const { paginatedData: paginatedDispatches, currentPage, totalPages, pageSize, setCurrentPage, setPageSize, startIndex, PAGE_SIZE_OPTIONS } = usePagination({ data: filteredDispatches });
+    const { sortedData, sortKey, sortDir, requestSort } = useTableSort({
+        data: filteredDispatches, defaultSortKey: 'dispatch_date', defaultSortDir: 'desc'
+    });
+
+    const { paginatedData: paginatedDispatches, currentPage, totalPages, pageSize, setCurrentPage, setPageSize, startIndex, PAGE_SIZE_OPTIONS } = usePagination({ data: sortedData });
 
     useEffect(() => { fetchData(); }, []);
 
@@ -342,7 +349,14 @@ const Dispatch = () => {
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="data-table" data-testid="dispatch-table">
-                                <thead><tr><th>#</th><th>Date</th><th>Order #</th><th>Customer</th><th>Brand</th><th>Size</th><th>Qty</th><th>PO</th><th>By</th><th></th></tr></thead>
+                                <thead><tr><th>#</th>
+                                    <SortableHeader label="Date" sortKey="dispatch_date" currentSortKey={sortKey} currentSortDir={sortDir} onSort={requestSort} />
+                                    <SortableHeader label="Order #" sortKey="order_number" currentSortKey={sortKey} currentSortDir={sortDir} onSort={requestSort} />
+                                    <SortableHeader label="Customer" sortKey="customer_name" currentSortKey={sortKey} currentSortDir={sortDir} onSort={requestSort} />
+                                    <SortableHeader label="Brand" sortKey="brand_name" currentSortKey={sortKey} currentSortDir={sortDir} onSort={requestSort} />
+                                    <th>Size</th>
+                                    <SortableHeader label="Qty" sortKey="quantity" currentSortKey={sortKey} currentSortDir={sortDir} onSort={requestSort} />
+                                    <th>PO</th><th>By</th><th>Updated By</th><th></th></tr></thead>
                                 <tbody>
                                     {paginatedDispatches.map((d, idx) => (
                                         <tr key={d._rowKey} data-testid={`dispatch-row-${d._rowKey}`}>
@@ -355,6 +369,7 @@ const Dispatch = () => {
                                             <td className="font-mono">{formatNumber(d.quantity)}</td>
                                             <td className="font-mono text-xs">{d.purchase_order_id ? purchaseOrders.find(po => po.id === d.purchase_order_id)?.serial_no || '-' : '-'}</td>
                                             <td className="text-muted-foreground">{d.created_by}</td>
+                                            <td className="text-muted-foreground">{d.updated_by || '-'}</td>
                                             <td>
                                                 <div className="flex gap-1">
                                                     <Button variant="ghost" size="icon" onClick={() => openEdit(d)} className="text-muted-foreground hover:text-primary"><Pencil className="w-4 h-4" /></Button>

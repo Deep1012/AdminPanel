@@ -2,12 +2,13 @@ const express = require("express");
 const { v4: uuidv4 } = require("uuid");
 const Customer = require("../models/Customer");
 const { authenticate, adminRequired } = require("../middleware/auth");
+const { logActivity } = require("../lib/activityLogger");
 
 const router = express.Router();
 
 router.get("/", authenticate, async (req, res) => {
   try {
-    const customers = await Customer.find({}, { _id: 0, __v: 0 }).sort({ name: 1 });
+    const customers = await Customer.find({}, { _id: 0, __v: 0 }).sort({ name: 1 }).lean();
     res.json(customers);
   } catch (error) {
     res.status(500).json({ detail: error.message });
@@ -32,6 +33,8 @@ router.post("/", authenticate, adminRequired, async (req, res) => {
       created_at: new Date().toISOString(),
     });
 
+    logActivity({ action: "CREATE", entity_type: "customer", entity_id: customer.id, entity_label: name.trim(), user: req.user, details: `Created customer "${name.trim()}"`, ip_address: req.ip });
+
     res.json(customer.toObject({ versionKey: false }));
   } catch (error) {
     res.status(500).json({ detail: error.message });
@@ -53,6 +56,8 @@ router.put("/:customerId", authenticate, adminRequired, async (req, res) => {
       return res.status(404).json({ detail: "Customer not found" });
     }
 
+    logActivity({ action: "UPDATE", entity_type: "customer", entity_id: req.params.customerId, entity_label: name.trim(), user: req.user, details: `Updated customer to "${name.trim()}"`, ip_address: req.ip });
+
     res.json({ message: "Customer updated successfully" });
   } catch (error) {
     res.status(500).json({ detail: error.message });
@@ -61,10 +66,14 @@ router.put("/:customerId", authenticate, adminRequired, async (req, res) => {
 
 router.delete("/:customerId", authenticate, adminRequired, async (req, res) => {
   try {
+    const existing = await Customer.findOne({ id: req.params.customerId }, { name: 1 }).lean();
     const result = await Customer.deleteOne({ id: req.params.customerId });
     if (result.deletedCount === 0) {
       return res.status(404).json({ detail: "Customer not found" });
     }
+
+    logActivity({ action: "DELETE", entity_type: "customer", entity_id: req.params.customerId, entity_label: existing?.name, user: req.user, details: `Deleted customer "${existing?.name || ""}"`, ip_address: req.ip });
+
     res.json({ message: "Customer deleted successfully" });
   } catch (error) {
     res.status(500).json({ detail: error.message });

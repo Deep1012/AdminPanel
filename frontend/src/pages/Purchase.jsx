@@ -7,8 +7,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/
 import ConfirmDialog from '../components/ConfirmDialog';
 import TableSearch from '../components/TableSearch';
 import TablePagination from '../components/TablePagination';
+import SortableHeader from '../components/SortableHeader';
 import { useTableFilter } from '../hooks/useTableFilter';
 import { usePagination } from '../hooks/usePagination';
+import { useTableSort } from '../hooks/useTableSort';
 import { purchaseAPI } from '../lib/api';
 import { formatDate, formatNumber, parseImportDate } from '../lib/utils';
 import { Plus, Trash2, Pencil, ShoppingCart, Loader2, AlertCircle, Layers, Download } from 'lucide-react';
@@ -29,6 +31,7 @@ const PURCHASE_EXPORT_COLUMNS = [
     { header: 'Available', key: 'no_of_sheets', transform: (v, row) => (row.no_of_sheets || 0) - (row.sheets_used || 0) },
     { header: 'Supplier', key: 'supplier', transform: (v) => v || '-' },
     { header: 'Created By', key: 'created_by' },
+    { header: 'Updated By', key: 'updated_by', transform: (v) => v || '-' },
 ];
 
 const emptyForm = { gauge: '', size1: '', size2: '', temper: '', weight: '', supplier: '', invoice_number: '', purchase_date: new Date().toISOString().split('T')[0] };
@@ -60,10 +63,14 @@ const Purchase = () => {
     ], [filterGauge, dateFrom, dateTo]);
 
     const filteredPurchases = useTableFilter({
-        data: purchases, searchTerm, searchFields: ['sr_no', 'supplier'], filters
+        data: purchases, searchTerm, searchFields: ['sr_no', 'supplier', 'gauge', 'size', 'weight', 'created_by'], filters
     });
 
-    const { paginatedData: paginatedPurchases, currentPage, totalPages, pageSize, setCurrentPage, setPageSize, startIndex, PAGE_SIZE_OPTIONS } = usePagination({ data: filteredPurchases });
+    const { sortedData, sortKey, sortDir, requestSort } = useTableSort({
+        data: filteredPurchases, defaultSortKey: 'purchase_date', defaultSortDir: 'desc'
+    });
+
+    const { paginatedData: paginatedPurchases, currentPage, totalPages, pageSize, setCurrentPage, setPageSize, startIndex, PAGE_SIZE_OPTIONS } = usePagination({ data: sortedData });
 
     useEffect(() => { fetchPurchases(); }, []);
 
@@ -124,6 +131,10 @@ const Purchase = () => {
 
     const totalSheets = purchases.reduce((s, p) => s + (p.no_of_sheets || 0), 0);
     const totalWeight = purchases.reduce((s, p) => s + (p.weight || 0), 0);
+
+    const sh = (label, key) => (
+        <SortableHeader label={label} sortKey={key} currentSortKey={sortKey} currentSortDir={sortDir} onSort={requestSort} />
+    );
 
     return (
         <div className="space-y-6 animate-fade-in" data-testid="purchase-page">
@@ -267,7 +278,23 @@ const Purchase = () => {
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="data-table" data-testid="purchase-table">
-                                <thead><tr><th>#</th><th>Date</th><th>Sr. No</th><th>Gauge</th><th>Size 1</th><th>Size 2</th><th>Temper</th><th>Weight</th><th>Total Sheets</th><th>Used</th><th>Available</th><th>Supplier</th><th>By</th><th></th></tr></thead>
+                                <thead><tr>
+                                    <th>#</th>
+                                    {sh('Date', 'purchase_date')}
+                                    {sh('Sr. No', 'sr_no')}
+                                    {sh('Gauge', 'gauge')}
+                                    {sh('Size 1', 'size1')}
+                                    {sh('Size 2', 'size2')}
+                                    {sh('Temper', 'temper')}
+                                    {sh('Weight', 'weight')}
+                                    {sh('Total Sheets', 'no_of_sheets')}
+                                    {sh('Used', 'sheets_used')}
+                                    <th>Available</th>
+                                    {sh('Supplier', 'supplier')}
+                                    <th>By</th>
+                                    <th>Updated By</th>
+                                    <th></th>
+                                </tr></thead>
                                 <tbody>
                                     {paginatedPurchases.map((p, idx) => (
                                         <tr key={p.id} data-testid={`purchase-row-${p.id}`}>
@@ -281,6 +308,7 @@ const Purchase = () => {
                                             <td className="text-success font-bold font-mono">{formatNumber(p.sheets_available ?? (p.no_of_sheets - (p.sheets_used || 0)))}</td>
                                             <td>{p.supplier || '-'}</td>
                                             <td className="text-muted-foreground">{p.created_by}</td>
+                                            <td className="text-muted-foreground">{p.updated_by || '-'}</td>
                                             <td>
                                                 <div className="flex gap-1">
                                                     <Button variant="ghost" size="icon" onClick={() => openEdit(p)} className="text-muted-foreground hover:text-primary"><Pencil className="w-4 h-4" /></Button>

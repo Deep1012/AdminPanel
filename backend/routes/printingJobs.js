@@ -3,6 +3,7 @@ const { v4: uuidv4 } = require("uuid");
 const PrintingJob = require("../models/PrintingJob");
 const Purchase = require("../models/Purchase");
 const { authenticate } = require("../middleware/auth");
+const { logActivity } = require("../lib/activityLogger");
 
 const router = express.Router();
 
@@ -25,7 +26,7 @@ router.post("/", authenticate, async (req, res) => {
     const id = uuidv4();
     const now = job_date || new Date().toISOString();
 
-    const rawMaterial = await Purchase.findOne({ id: raw_material_id }, { _id: 0, __v: 0 });
+    const rawMaterial = await Purchase.findOne({ id: raw_material_id }, { _id: 0, __v: 0 }).lean();
     if (!rawMaterial) {
       return res.status(404).json({ detail: "Raw material not found" });
     }
@@ -80,6 +81,8 @@ router.post("/", authenticate, async (req, res) => {
       { $inc: { sheets_used: total_sheets_used } }
     );
 
+    logActivity({ action: "CREATE", entity_type: "printing_job", entity_id: id, entity_label: job_number, user: req.user, details: `Created printing job ${job_number} (${total_bodies} bodies, ${total_sheets_used} sheets)`, ip_address: req.ip });
+
     res.json(job.toObject({ versionKey: false }));
   } catch (error) {
     res.status(500).json({ detail: error.message });
@@ -88,21 +91,20 @@ router.post("/", authenticate, async (req, res) => {
 
 router.get("/", authenticate, async (req, res) => {
   try {
-    const jobs = await PrintingJob.find({}, { _id: 0, __v: 0 }).sort({ job_date: -1 });
+    const jobs = await PrintingJob.find({}, { _id: 0, __v: 0 }).sort({ job_date: -1 }).lean();
     const result = jobs.map((j) => {
-      const obj = j.toObject();
-      if (!obj.raw_material_sr_no) obj.raw_material_sr_no = "N/A";
-      if (!obj.raw_material_size) obj.raw_material_size = "N/A";
-      if (obj.sheets_from_material === undefined) obj.sheets_from_material = 0;
-      if (!obj.raw_material_id) obj.raw_material_id = "";
-      if (!obj.sizes) {
-        obj.sizes = [{
-          size_id: obj.size_id || "",
-          size_name: obj.size_name || "N/A",
-          brands: obj.brands || [],
+      if (!j.raw_material_sr_no) j.raw_material_sr_no = "N/A";
+      if (!j.raw_material_size) j.raw_material_size = "N/A";
+      if (j.sheets_from_material === undefined) j.sheets_from_material = 0;
+      if (!j.raw_material_id) j.raw_material_id = "";
+      if (!j.sizes) {
+        j.sizes = [{
+          size_id: j.size_id || "",
+          size_name: j.size_name || "N/A",
+          brands: j.brands || [],
         }];
       }
-      return obj;
+      return j;
     });
     res.json(result);
   } catch (error) {
@@ -113,7 +115,10 @@ router.get("/", authenticate, async (req, res) => {
 router.put("/:jobId", authenticate, async (req, res) => {
   try {
     const { notes, job_date, sizes, sheets_used } = req.body;
-    const updateData = {};
+    const updateData = {
+      updated_by: req.user.username,
+      updated_at: new Date().toISOString(),
+    };
     if (notes !== undefined) updateData.notes = notes;
     if (job_date !== undefined) updateData.job_date = job_date;
     if (sizes !== undefined) {
@@ -152,14 +157,12 @@ router.put("/:jobId", authenticate, async (req, res) => {
       }
     }
 
-    if (Object.keys(updateData).length === 0) {
-      return res.status(400).json({ detail: "No fields to update" });
-    }
-
     const result = await PrintingJob.updateOne({ id: req.params.jobId }, { $set: updateData });
     if (result.matchedCount === 0) {
       return res.status(404).json({ detail: "Job not found" });
     }
+
+    logActivity({ action: "UPDATE", entity_type: "printing_job", entity_id: req.params.jobId, user: req.user, details: `Updated printing job`, ip_address: req.ip });
 
     res.json({ message: "Job updated successfully" });
   } catch (error) {
@@ -181,6 +184,9 @@ router.delete("/:jobId", authenticate, async (req, res) => {
     }
 
     await PrintingJob.deleteOne({ id: req.params.jobId });
+
+    logActivity({ action: "DELETE", entity_type: "printing_job", entity_id: req.params.jobId, entity_label: job.job_number, user: req.user, details: `Deleted printing job ${job.job_number}`, ip_address: req.ip });
+
     res.json({ message: "Job deleted successfully" });
   } catch (error) {
     res.status(500).json({ detail: error.message });

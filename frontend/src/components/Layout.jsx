@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useSidebar } from '../hooks/useSidebar';
-import { menuItemsAPI } from '../lib/api';
+import { menuItemsAPI, dashboardAPI } from '../lib/api';
 import { getIcon } from '../lib/iconMap';
+import { exportToExcel } from '../lib/exportToExcel';
+import { formatDate } from '../lib/utils';
 import { Button } from './ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 import { Avatar, AvatarFallback } from './ui/avatar';
@@ -14,8 +16,9 @@ import {
 import {
     LayoutDashboard, ShoppingCart, ClipboardList, Printer, Factory, Truck,
     Settings, Tag, Ruler, LogOut, Menu, X, Package, User, Users, Layers,
-    ChevronLeft, ChevronRight, ChevronDown
+    ChevronLeft, ChevronRight, ChevronDown, Download, Loader2
 } from 'lucide-react';
+import { toast } from 'sonner';
 
 // Fallback if API fails or menu items not yet seeded
 const FALLBACK_NAV_ITEMS = [
@@ -42,6 +45,7 @@ export const Layout = ({ children }) => {
     const { isCollapsed, toggleSidebar } = useSidebar();
     const [mobileOpen, setMobileOpen] = useState(false);
     const [navItems, setNavItems] = useState([]);
+    const [exporting, setExporting] = useState(false);
 
     useEffect(() => {
         menuItemsAPI.getAll()
@@ -58,6 +62,79 @@ export const Layout = ({ children }) => {
     const handleLogout = () => {
         logout();
         navigate('/login');
+    };
+
+    const handleGlobalExport = async () => {
+        try {
+            setExporting(true);
+            toast.info('Fetching all data for export...');
+            const res = await dashboardAPI.getExportAll();
+            const d = res.data;
+            const today = formatDate(new Date().toISOString());
+
+            const exports = [
+                {
+                    data: d.purchases, fileName: `Purchases_${today}`, sheetName: 'Purchases',
+                    columns: [
+                        { header: 'Sr No', key: 'sr_no' }, { header: 'Date', key: 'purchase_date', transform: v => formatDate(v) },
+                        { header: 'Supplier', key: 'supplier' }, { header: 'Size', key: 'size' }, { header: 'Gauge', key: 'gauge' },
+                        { header: 'Weight (kg)', key: 'weight' }, { header: 'No of Sheets', key: 'no_of_sheets' },
+                        { header: 'Created By', key: 'created_by' }, { header: 'Updated By', key: 'updated_by' },
+                    ],
+                },
+                {
+                    data: d.printingJobs, fileName: `Printing_Jobs_${today}`, sheetName: 'Printing Jobs',
+                    columns: [
+                        { header: 'Job #', key: 'job_number' }, { header: 'Date', key: 'job_date', transform: v => formatDate(v) },
+                        { header: 'Sheets Used', key: 'sheets_used' }, { header: 'Notes', key: 'notes' },
+                        { header: 'Created By', key: 'created_by' }, { header: 'Updated By', key: 'updated_by' },
+                    ],
+                },
+                {
+                    data: d.production, fileName: `Production_${today}`, sheetName: 'Production',
+                    columns: [
+                        { header: 'Date', key: 'production_date', transform: v => formatDate(v) },
+                        { header: 'Brand', key: 'brand_name' }, { header: 'Size', key: 'size_name' },
+                        { header: 'Qty Produced', key: 'quantity' }, { header: 'Printing Used', key: 'printing_stock_used' },
+                        { header: 'Created By', key: 'created_by' }, { header: 'Updated By', key: 'updated_by' },
+                    ],
+                },
+                {
+                    data: d.dispatches, fileName: `Dispatches_${today}`, sheetName: 'Dispatches',
+                    columns: [
+                        { header: 'Order #', key: 'order_number' }, { header: 'Date', key: 'dispatch_date', transform: v => formatDate(v) },
+                        { header: 'Customer', key: 'customer_name' }, { header: 'Notes', key: 'notes' },
+                        { header: 'Created By', key: 'created_by' }, { header: 'Updated By', key: 'updated_by' },
+                    ],
+                },
+                {
+                    data: d.purchaseOrders, fileName: `Purchase_Orders_${today}`, sheetName: 'Purchase Orders',
+                    columns: [
+                        { header: 'Serial No', key: 'serial_no' }, { header: 'Date', key: 'date', transform: v => formatDate(v) },
+                        { header: 'Company', key: 'company_name' }, { header: 'Brand', key: 'brand_name' },
+                        { header: 'Size', key: 'size_name' }, { header: 'Quantity', key: 'quantity' },
+                        { header: 'Dispatched', key: 'quantity_dispatched' },
+                        { header: 'Created By', key: 'created_by' }, { header: 'Updated By', key: 'updated_by' },
+                    ],
+                },
+                {
+                    data: d.customers, fileName: `Customers_${today}`, sheetName: 'Customers',
+                    columns: [
+                        { header: 'Name', key: 'name' }, { header: 'Created At', key: 'created_at', transform: v => formatDate(v) },
+                    ],
+                },
+            ];
+
+            let count = 0;
+            for (const exp of exports) {
+                if (exportToExcel(exp)) count++;
+            }
+            toast.success(`Exported ${count} file(s) successfully`);
+        } catch (err) {
+            toast.error('Failed to export data');
+        } finally {
+            setExporting(false);
+        }
     };
 
     const filteredNavItems = navItems.filter(item => !item.admin_only || isAdmin());
@@ -204,6 +281,26 @@ export const Layout = ({ children }) => {
                                 </h2>
                             )}
                         </div>
+                        {/* Global Export */}
+                        <TooltipProvider delayDuration={0}>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button
+                                        variant="outline"
+                                        size="icon"
+                                        className="h-9 w-9 rounded-sm"
+                                        onClick={handleGlobalExport}
+                                        disabled={exporting}
+                                        data-testid="global-export-btn"
+                                    >
+                                        {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent className="font-bold uppercase tracking-wider text-xs">
+                                    Export All Tables
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
                         {/* Profile dropdown */}
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
