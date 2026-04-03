@@ -302,7 +302,7 @@ const Printing = () => {
                         {/* Sheets Used — job-level, common for all entries */}
                         <div className="space-y-2">
                             <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Sheets Used *</Label>
-                            <Input type="number" value={formData.sheets_used} onChange={(e) => setFormData({ ...formData, sheets_used: e.target.value })} placeholder="Sheets used from raw material" className="bg-background border-input rounded-sm font-mono" data-testid="sheets-used" />
+                            <Input type="number" min="1" value={formData.sheets_used} onChange={(e) => setFormData({ ...formData, sheets_used: e.target.value })} placeholder="Sheets used from raw material" className="bg-background border-input rounded-sm font-mono" data-testid="sheets-used" />
                             {selectedMaterial && sheetsNum > 0 && (
                                 <p className={`text-xs font-mono ${sheetsNum > selectedMaterial.sheets_available ? 'text-destructive' : 'text-muted-foreground'}`}>
                                     {formatNumber(sheetsNum)} / {formatNumber(selectedMaterial.sheets_available)} available
@@ -319,7 +319,7 @@ const Printing = () => {
                                 <SelectTrigger className="bg-background border-input rounded-sm" data-testid="brand-select"><SelectValue placeholder="Brand" /></SelectTrigger>
                                 <SelectContent className="bg-card border-border rounded-sm max-h-60">{brands.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
                             </Select>
-                            <Input type="number" value={currentBodiesCount} onChange={(e) => setCurrentBodiesCount(e.target.value)} placeholder="Bodies" className="bg-background border-input rounded-sm font-mono" data-testid="bodies-count" />
+                            <Input type="number" min="1" value={currentBodiesCount} onChange={(e) => setCurrentBodiesCount(e.target.value)} placeholder="Bodies" className="bg-background border-input rounded-sm font-mono" data-testid="bodies-count" />
                             <Button type="button" onClick={handleAddEntry} className="rounded-sm" data-testid="add-entry-btn"><Plus className="w-4 h-4" /></Button>
                         </div>
                         {jobEntries.length > 0 && (
@@ -373,7 +373,7 @@ const Printing = () => {
                         )}
                         <div className="space-y-2">
                             <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Sheets Used *</Label>
-                            <Input type="number" value={editForm.sheets_used} onChange={(e) => setEditForm({ ...editForm, sheets_used: e.target.value })} placeholder="Sheets used from raw material" className="bg-background border-input rounded-sm font-mono" />
+                            <Input type="number" min="1" value={editForm.sheets_used} onChange={(e) => setEditForm({ ...editForm, sheets_used: e.target.value })} placeholder="Sheets used from raw material" className="bg-background border-input rounded-sm font-mono" />
                         </div>
                         <div className="border-t border-border pt-4"><Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Size, Brand & Bodies</Label></div>
                         <div className="grid grid-cols-4 gap-2">
@@ -385,7 +385,7 @@ const Printing = () => {
                                 <SelectTrigger className="bg-background border-input rounded-sm"><SelectValue placeholder="Brand" /></SelectTrigger>
                                 <SelectContent className="bg-card border-border rounded-sm max-h-60">{brands.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
                             </Select>
-                            <Input type="number" value={editBodiesCount} onChange={(e) => setEditBodiesCount(e.target.value)} placeholder="Bodies" className="bg-background border-input rounded-sm font-mono" />
+                            <Input type="number" min="1" value={editBodiesCount} onChange={(e) => setEditBodiesCount(e.target.value)} placeholder="Bodies" className="bg-background border-input rounded-sm font-mono" />
                             <Button type="button" onClick={handleEditAddEntry} className="rounded-sm"><Plus className="w-4 h-4" /></Button>
                         </div>
                         {editEntries.length > 0 && (
