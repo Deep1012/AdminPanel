@@ -18,8 +18,9 @@ const DEFAULT_MENU_ITEMS = [
   { label: "CUSTOMERS", path: "/customers", icon: "Users", display_order: 10, admin_only: true },
   { label: "BRANDS", path: "/brands", icon: "Tag", display_order: 11, admin_only: true },
   { label: "SIZES", path: "/sizes", icon: "Ruler", display_order: 12, admin_only: true },
-  { label: "MENU MANAGEMENT", path: "/menu-management", icon: "Menu", display_order: 13, admin_only: true, is_system: true },
-  { label: "USERS", path: "/admin", icon: "Settings", display_order: 14, admin_only: true, is_system: true },
+  { label: "ACTIVITY LOGS", path: "/activity-logs", icon: "Activity", display_order: 13, admin_only: true, is_system: true },
+  { label: "MENU MANAGEMENT", path: "/menu-management", icon: "Menu", display_order: 14, admin_only: true, is_system: true },
+  { label: "USERS", path: "/admin", icon: "Settings", display_order: 15, admin_only: true, is_system: true },
 ];
 
 // GET all menu items (all authenticated users)

@@ -34,6 +34,7 @@ const FALLBACK_NAV_ITEMS = [
     { path: '/customers', label: 'CUSTOMERS', icon: 'Users', admin_only: true },
     { path: '/brands', label: 'BRANDS', icon: 'Tag', admin_only: true },
     { path: '/sizes', label: 'SIZES', icon: 'Ruler', admin_only: true },
+    { path: '/activity-logs', label: 'ACTIVITY LOGS', icon: 'Activity', admin_only: true },
     { path: '/menu-management', label: 'MENU MANAGEMENT', icon: 'Menu', admin_only: true },
     { path: '/admin', label: 'USERS', icon: 'Settings', admin_only: true },
 ];
@@ -281,26 +282,28 @@ export const Layout = ({ children }) => {
                                 </h2>
                             )}
                         </div>
-                        {/* Global Export */}
-                        <TooltipProvider delayDuration={0}>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Button
-                                        variant="outline"
-                                        size="icon"
-                                        className="h-9 w-9 rounded-sm"
-                                        onClick={handleGlobalExport}
-                                        disabled={exporting}
-                                        data-testid="global-export-btn"
-                                    >
-                                        {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                                    </Button>
-                                </TooltipTrigger>
-                                <TooltipContent className="font-bold uppercase tracking-wider text-xs">
-                                    Export All Tables
-                                </TooltipContent>
-                            </Tooltip>
-                        </TooltipProvider>
+                        {/* Global Export (admin only) */}
+                        {isAdmin() && (
+                            <TooltipProvider delayDuration={0}>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button
+                                            variant="outline"
+                                            size="icon"
+                                            className="h-9 w-9 rounded-sm"
+                                            onClick={handleGlobalExport}
+                                            disabled={exporting}
+                                            data-testid="global-export-btn"
+                                        >
+                                            {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent className="font-bold uppercase tracking-wider text-xs">
+                                        Export All Tables
+                                    </TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
+                        )}
                         {/* Profile dropdown */}
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
