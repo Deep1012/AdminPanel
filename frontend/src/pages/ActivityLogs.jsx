@@ -108,31 +108,37 @@ const ActivityLogs = () => {
             <Card className="industrial-card">
                 <CardHeader><CardTitle className="font-display text-xl font-bold tracking-tight uppercase">Activity Logs</CardTitle></CardHeader>
                 <div className="px-6 pb-4">
-                    <div className="grid grid-cols-2 sm:grid-cols-6 gap-2">
-                        <Select value={filterAction} onValueChange={(v) => { setFilterAction(v === 'all' ? '' : v); setPage(1); }}>
-                            <SelectTrigger className="bg-background border-input rounded-sm"><SelectValue placeholder="Action" /></SelectTrigger>
-                            <SelectContent className="bg-card border-border rounded-sm">
-                                <SelectItem value="all">All Actions</SelectItem>
-                                {ACTION_TYPES.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
-                            </SelectContent>
-                        </Select>
-                        <Select value={filterEntity} onValueChange={(v) => { setFilterEntity(v === 'all' ? '' : v); setPage(1); }}>
-                            <SelectTrigger className="bg-background border-input rounded-sm"><SelectValue placeholder="Entity" /></SelectTrigger>
-                            <SelectContent className="bg-card border-border rounded-sm">
-                                <SelectItem value="all">All Entities</SelectItem>
-                                {ENTITY_TYPES.map(e => <SelectItem key={e} value={e}>{e.replace('_', ' ')}</SelectItem>)}
-                            </SelectContent>
-                        </Select>
-                        <Input value={filterUsername} onChange={(e) => { setFilterUsername(e.target.value); setPage(1); }} placeholder="Username..." className="bg-background border-input rounded-sm" />
-                        <div className="space-y-1">
-                            <Label className="text-[10px] font-bold uppercase text-muted-foreground">From</Label>
-                            <Input type="date" value={filterDateFrom} onChange={(e) => { setFilterDateFrom(e.target.value); setPage(1); }} className="bg-background border-input rounded-sm font-mono text-xs" />
+                    <div className="flex flex-wrap items-end gap-2">
+                        <div className="min-w-[140px]">
+                            <Select value={filterAction} onValueChange={(v) => { setFilterAction(v === 'all' ? '' : v); setPage(1); }}>
+                                <SelectTrigger className="bg-background border-input rounded-sm h-9"><SelectValue placeholder="Action" /></SelectTrigger>
+                                <SelectContent className="bg-card border-border rounded-sm">
+                                    <SelectItem value="all">All Actions</SelectItem>
+                                    {ACTION_TYPES.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
                         </div>
-                        <div className="space-y-1">
-                            <Label className="text-[10px] font-bold uppercase text-muted-foreground">To</Label>
-                            <Input type="date" value={filterDateTo} onChange={(e) => { setFilterDateTo(e.target.value); setPage(1); }} className="bg-background border-input rounded-sm font-mono text-xs" />
+                        <div className="min-w-[140px]">
+                            <Select value={filterEntity} onValueChange={(v) => { setFilterEntity(v === 'all' ? '' : v); setPage(1); }}>
+                                <SelectTrigger className="bg-background border-input rounded-sm h-9"><SelectValue placeholder="Entity" /></SelectTrigger>
+                                <SelectContent className="bg-card border-border rounded-sm">
+                                    <SelectItem value="all">All Entities</SelectItem>
+                                    {ENTITY_TYPES.map(e => <SelectItem key={e} value={e}>{e.replace('_', ' ')}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
                         </div>
-                        <Button variant="outline" onClick={clearFilters} className="rounded-sm text-xs font-bold uppercase">Clear</Button>
+                        <div className="min-w-[140px]">
+                            <Input value={filterUsername} onChange={(e) => { setFilterUsername(e.target.value); setPage(1); }} placeholder="Username..." className="bg-background border-input rounded-sm h-9" />
+                        </div>
+                        <div className="min-w-[140px]">
+                            <Label className="text-[10px] font-bold uppercase text-muted-foreground mb-1 block">From</Label>
+                            <Input type="date" value={filterDateFrom} onChange={(e) => { setFilterDateFrom(e.target.value); setPage(1); }} className="bg-background border-input rounded-sm font-mono text-xs h-9" />
+                        </div>
+                        <div className="min-w-[140px]">
+                            <Label className="text-[10px] font-bold uppercase text-muted-foreground mb-1 block">To</Label>
+                            <Input type="date" value={filterDateTo} onChange={(e) => { setFilterDateTo(e.target.value); setPage(1); }} className="bg-background border-input rounded-sm font-mono text-xs h-9" />
+                        </div>
+                        <Button variant="outline" onClick={clearFilters} className="rounded-sm text-xs font-bold uppercase h-9">Clear</Button>
                     </div>
                     <p className="text-xs text-muted-foreground mt-2">{formatNumber(total)} log(s) found</p>
                 </div>
@@ -160,8 +166,8 @@ const ActivityLogs = () => {
                                                 <td className="text-xs uppercase">{log.entity_type?.replace('_', ' ')}</td>
                                                 <td className="font-medium text-sm">{log.entity_label || '-'}</td>
                                                 <td className="text-muted-foreground">{log.username}</td>
-                                                <td className="max-w-xs truncate text-xs text-muted-foreground">{log.details || '-'}</td>
-                                                <td className="text-xs font-mono text-muted-foreground">{log.ip_address || '-'}</td>
+                                                <td className="max-w-xs truncate text-xs text-muted-foreground" title={log.details || ''}>{log.details || '-'}</td>
+                                                <td className="text-xs font-mono text-muted-foreground whitespace-nowrap">{log.ip_address || '-'}</td>
                                             </tr>
                                         );
                                     })}
