@@ -150,7 +150,7 @@ const ActivityLogs = () => {
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="data-table" data-testid="activity-logs-table">
-                                <thead><tr><th>Timestamp</th><th>Action</th><th>Entity</th><th>Label</th><th>User</th><th>Details</th><th>IP</th></tr></thead>
+                                <thead><tr><th>Timestamp</th><th>Action</th><th>Entity</th><th>Label</th><th>User</th><th className="w-[200px]">Details</th><th className="w-[120px]">IP Address</th></tr></thead>
                                 <tbody>
                                     {logs.map((log) => {
                                         const IconComp = ACTION_ICONS[log.action] || Activity;
@@ -166,8 +166,8 @@ const ActivityLogs = () => {
                                                 <td className="text-xs uppercase">{log.entity_type?.replace('_', ' ')}</td>
                                                 <td className="font-medium text-sm">{log.entity_label || '-'}</td>
                                                 <td className="text-muted-foreground">{log.username}</td>
-                                                <td className="max-w-xs truncate text-xs text-muted-foreground" title={log.details || ''}>{log.details || '-'}</td>
-                                                <td className="text-xs font-mono text-muted-foreground whitespace-nowrap">{log.ip_address || '-'}</td>
+                                                <td className="text-xs text-muted-foreground truncate max-w-[200px]" title={log.details || ''}>{log.details || '-'}</td>
+                                                <td className="text-xs font-mono text-muted-foreground">{log.ip_address || '-'}</td>
                                             </tr>
                                         );
                                     })}
