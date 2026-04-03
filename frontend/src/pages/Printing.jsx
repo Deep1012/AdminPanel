@@ -43,26 +43,24 @@ const Printing = () => {
     const [submitting, setSubmitting] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState(null);
 
-    const [formData, setFormData] = useState({ raw_material_id: '', notes: '', job_date: new Date().toISOString().split('T')[0] });
+    // Create form state
+    const [formData, setFormData] = useState({ raw_material_id: '', notes: '', job_date: new Date().toISOString().split('T')[0], sheets_used: '' });
     const [selectedMaterial, setSelectedMaterial] = useState(null);
     const [jobEntries, setJobEntries] = useState([]);
     const [currentSizeId, setCurrentSizeId] = useState('');
     const [currentBrandId, setCurrentBrandId] = useState('');
     const [currentBodiesCount, setCurrentBodiesCount] = useState('');
-    const [currentSheetsUsed, setCurrentSheetsUsed] = useState('');
 
+    // Edit form state
     const [editingId, setEditingId] = useState(null);
-    const [editForm, setEditForm] = useState({ notes: '', job_date: '' });
+    const [editForm, setEditForm] = useState({ notes: '', job_date: '', sheets_used: '' });
     const [editEntries, setEditEntries] = useState([]);
     const [editSizeId, setEditSizeId] = useState('');
     const [editBrandId, setEditBrandId] = useState('');
     const [editBodiesCount, setEditBodiesCount] = useState('');
-    const [editSheetsUsed, setEditSheetsUsed] = useState('');
     const [editMaterialInfo, setEditMaterialInfo] = useState(null);
 
-    // Search & filter
     const [searchTerm, setSearchTerm] = useState('');
-
     const filters = useMemo(() => [], []);
 
     // Flatten jobs: each size+brand combo = one row
@@ -72,7 +70,6 @@ const Printing = () => {
             const jobSheets = job.sheets_from_material || 0;
             for (const sizeEntry of (job.sizes || [])) {
                 for (const brand of (sizeEntry.brands || [])) {
-                    const sheets = brand.sheets_used || jobSheets;
                     rows.push({
                         _rowKey: `${job.id}_${sizeEntry.size_id}_${brand.brand_id}`,
                         id: job.id,
@@ -80,11 +77,11 @@ const Printing = () => {
                         job_number: job.job_number,
                         raw_material_sr_no: job.raw_material_sr_no,
                         raw_material_size: job.raw_material_size,
-                        sheets_from_material: sheets,
+                        sheets_from_material: jobSheets,
                         size_name: sizeEntry.size_name,
                         brand_name: brand.brand_name,
                         bodies_count: brand.bodies_count || 0,
-                        total_printing: (brand.bodies_count || 0) * sheets,
+                        total_printing: (brand.bodies_count || 0) * jobSheets,
                         created_by: job.created_by,
                         notes: job.notes,
                     });
@@ -114,8 +111,8 @@ const Printing = () => {
     };
 
     const resetForm = () => {
-        setFormData({ raw_material_id: '', notes: '', job_date: new Date().toISOString().split('T')[0] });
-        setSelectedMaterial(null); setJobEntries([]); setCurrentSizeId(''); setCurrentBrandId(''); setCurrentBodiesCount(''); setCurrentSheetsUsed('');
+        setFormData({ raw_material_id: '', notes: '', job_date: new Date().toISOString().split('T')[0], sheets_used: '' });
+        setSelectedMaterial(null); setJobEntries([]); setCurrentSizeId(''); setCurrentBrandId(''); setCurrentBodiesCount('');
     };
 
     const handleMaterialChange = (materialId) => {
@@ -124,38 +121,35 @@ const Printing = () => {
     };
 
     const handleAddEntry = () => {
-        if (!currentSizeId || !currentBrandId || !currentBodiesCount || !currentSheetsUsed) { toast.error('Please select size, brand, enter bodies and sheets used'); return; }
-        const sheetsVal = parseInt(currentSheetsUsed);
-        if (!sheetsVal || sheetsVal <= 0) { toast.error('Sheets used must be a positive number'); return; }
-        if (selectedMaterial) {
-            const alreadyUsed = jobEntries.reduce((sum, e) => sum + (e.sheets_used || 0), 0);
-            if (alreadyUsed + sheetsVal > selectedMaterial.sheets_available) {
-                toast.error(`Total sheets used (${alreadyUsed + sheetsVal}) exceeds available (${selectedMaterial.sheets_available})`); return;
-            }
-        }
+        if (!currentSizeId || !currentBrandId || !currentBodiesCount) { toast.error('Please select size, brand, and enter bodies count'); return; }
         const size = sizes.find(s => s.id === currentSizeId);
         const brand = brands.find(b => b.id === currentBrandId);
         if (!size || !brand) return;
-        setJobEntries([...jobEntries, { size_id: size.id, size_name: size.name, brand_id: brand.id, brand_name: brand.name, bodies_count: parseInt(currentBodiesCount), sheets_used: sheetsVal }]);
-        setCurrentSizeId(''); setCurrentBrandId(''); setCurrentBodiesCount(''); setCurrentSheetsUsed('');
+        setJobEntries([...jobEntries, { size_id: size.id, size_name: size.name, brand_id: brand.id, brand_name: brand.name, bodies_count: parseInt(currentBodiesCount) }]);
+        setCurrentSizeId(''); setCurrentBrandId(''); setCurrentBodiesCount('');
     };
 
     const handleRemoveEntry = (index) => { setJobEntries(jobEntries.filter((_, i) => i !== index)); };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!formData.raw_material_id || jobEntries.length === 0) {
-            toast.error('Please select raw material and add at least one entry'); return;
+        const sheetsVal = parseInt(formData.sheets_used);
+        if (!formData.raw_material_id || jobEntries.length === 0 || !sheetsVal) {
+            toast.error('Please select raw material, enter sheets used, and add at least one entry'); return;
+        }
+        if (selectedMaterial && sheetsVal > selectedMaterial.sheets_available) {
+            toast.error(`Sheets used (${sheetsVal}) exceeds available (${selectedMaterial.sheets_available})`); return;
         }
         const sizesMap = {};
         jobEntries.forEach(entry => {
             if (!sizesMap[entry.size_id]) { sizesMap[entry.size_id] = { size_id: entry.size_id, size_name: entry.size_name, brands: [] }; }
-            sizesMap[entry.size_id].brands.push({ brand_id: entry.brand_id, brand_name: entry.brand_name, bodies_count: entry.bodies_count, sheets_used: entry.sheets_used });
+            sizesMap[entry.size_id].brands.push({ brand_id: entry.brand_id, brand_name: entry.brand_name, bodies_count: entry.bodies_count });
         });
         setSubmitting(true);
         try {
             await printingAPI.create({
                 raw_material_id: formData.raw_material_id,
+                sheets_used: sheetsVal,
                 sizes: Object.values(sizesMap), notes: formData.notes || null,
                 job_date: new Date(formData.job_date).toISOString(),
             });
@@ -171,7 +165,7 @@ const Printing = () => {
         const entries = [];
         for (const sizeEntry of (job.sizes || [])) {
             for (const brand of (sizeEntry.brands || [])) {
-                entries.push({ size_id: sizeEntry.size_id, size_name: sizeEntry.size_name, brand_id: brand.brand_id, brand_name: brand.brand_name, bodies_count: brand.bodies_count, sheets_used: brand.sheets_used || job.sheets_from_material || 0 });
+                entries.push({ size_id: sizeEntry.size_id, size_name: sizeEntry.size_name, brand_id: brand.brand_id, brand_name: brand.brand_name, bodies_count: brand.bodies_count });
             }
         }
         setEditEntries(entries);
@@ -179,34 +173,35 @@ const Printing = () => {
         setEditForm({
             job_date: job.job_date ? job.job_date.split('T')[0] : new Date().toISOString().split('T')[0],
             notes: job.notes || '',
+            sheets_used: String(job.sheets_from_material || ''),
         });
-        setEditSizeId(''); setEditBrandId(''); setEditBodiesCount(''); setEditSheetsUsed('');
+        setEditSizeId(''); setEditBrandId(''); setEditBodiesCount('');
         setEditDialogOpen(true);
     };
 
     const handleEditAddEntry = () => {
-        if (!editSizeId || !editBrandId || !editBodiesCount || !editSheetsUsed) { toast.error('Please select size, brand, enter bodies and sheets used'); return; }
-        const sheetsVal = parseInt(editSheetsUsed);
-        if (!sheetsVal || sheetsVal <= 0) { toast.error('Sheets used must be a positive number'); return; }
+        if (!editSizeId || !editBrandId || !editBodiesCount) { toast.error('Please select size, brand, and enter bodies count'); return; }
         const size = sizes.find(s => s.id === editSizeId);
         const brand = brands.find(b => b.id === editBrandId);
         if (!size || !brand) return;
-        setEditEntries([...editEntries, { size_id: size.id, size_name: size.name, brand_id: brand.id, brand_name: brand.name, bodies_count: parseInt(editBodiesCount), sheets_used: sheetsVal }]);
-        setEditSizeId(''); setEditBrandId(''); setEditBodiesCount(''); setEditSheetsUsed('');
+        setEditEntries([...editEntries, { size_id: size.id, size_name: size.name, brand_id: brand.id, brand_name: brand.name, bodies_count: parseInt(editBodiesCount) }]);
+        setEditSizeId(''); setEditBrandId(''); setEditBodiesCount('');
     };
 
     const handleEditSubmit = async (e) => {
         e.preventDefault();
-        if (editEntries.length === 0) { toast.error('Add at least one entry'); return; }
+        const sheetsVal = parseInt(editForm.sheets_used);
+        if (editEntries.length === 0 || !sheetsVal) { toast.error('Add at least one entry and specify sheets used'); return; }
         const sizesMap = {};
         editEntries.forEach(entry => {
             if (!sizesMap[entry.size_id]) { sizesMap[entry.size_id] = { size_id: entry.size_id, size_name: entry.size_name, brands: [] }; }
-            sizesMap[entry.size_id].brands.push({ brand_id: entry.brand_id, brand_name: entry.brand_name, bodies_count: entry.bodies_count, sheets_used: entry.sheets_used });
+            sizesMap[entry.size_id].brands.push({ brand_id: entry.brand_id, brand_name: entry.brand_name, bodies_count: entry.bodies_count });
         });
         setSubmitting(true);
         try {
             await printingAPI.update(editingId, {
                 job_date: new Date(editForm.job_date).toISOString(),
+                sheets_used: sheetsVal,
                 sizes: Object.values(sizesMap),
                 notes: editForm.notes || null,
             });
@@ -223,7 +218,9 @@ const Printing = () => {
     };
 
     const clearFilters = () => { setSearchTerm(''); };
-    const getTotalBodies = () => jobEntries.reduce((sum, e) => sum + e.bodies_count, 0);
+
+    const sheetsNum = parseInt(formData.sheets_used) || 0;
+    const totalBodies = jobEntries.reduce((sum, e) => sum + e.bodies_count, 0);
 
     return (
         <div className="space-y-6 animate-fade-in" data-testid="printing-page">
@@ -258,7 +255,8 @@ const Printing = () => {
                                     if (!material || !brand || !size) { failed++; onProgress(success + failed); continue; }
                                     await printingAPI.create({
                                         raw_material_id: material.id,
-                                        sizes: [{ size_id: size.id, size_name: size.name, brands: [{ brand_id: brand.id, brand_name: brand.name, bodies_count: parseInt(row.bodies_count), sheets_used: parseInt(row.sheets_used) }] }],
+                                        sheets_used: parseInt(row.sheets_used),
+                                        sizes: [{ size_id: size.id, size_name: size.name, brands: [{ brand_id: brand.id, brand_name: brand.name, bodies_count: parseInt(row.bodies_count) }] }],
                                         job_date: parseImportDate(row.job_date) || new Date().toISOString(),
                                         notes: row.notes || null,
                                     });
@@ -301,8 +299,18 @@ const Printing = () => {
                                 <div><p className="text-xs font-bold uppercase text-muted-foreground">Available Sheets</p><p className="font-mono font-bold text-primary">{formatNumber(selectedMaterial.sheets_available)}</p></div>
                             </div>
                         )}
-                        <div className="border-t border-border pt-4"><Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Add Size, Brand, Bodies & Sheets</Label></div>
-                        <div className="grid grid-cols-5 gap-2">
+                        {/* Sheets Used — job-level, common for all entries */}
+                        <div className="space-y-2">
+                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Sheets Used *</Label>
+                            <Input type="number" value={formData.sheets_used} onChange={(e) => setFormData({ ...formData, sheets_used: e.target.value })} placeholder="Sheets used from raw material" className="bg-background border-input rounded-sm font-mono" data-testid="sheets-used" />
+                            {selectedMaterial && sheetsNum > 0 && (
+                                <p className={`text-xs font-mono ${sheetsNum > selectedMaterial.sheets_available ? 'text-destructive' : 'text-muted-foreground'}`}>
+                                    {formatNumber(sheetsNum)} / {formatNumber(selectedMaterial.sheets_available)} available
+                                </p>
+                            )}
+                        </div>
+                        <div className="border-t border-border pt-4"><Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Add Size, Brand & Bodies</Label></div>
+                        <div className="grid grid-cols-4 gap-2">
                             <Select value={currentSizeId} onValueChange={setCurrentSizeId}>
                                 <SelectTrigger className="bg-background border-input rounded-sm" data-testid="container-size"><SelectValue placeholder="Size" /></SelectTrigger>
                                 <SelectContent className="bg-card border-border rounded-sm">{sizes.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
@@ -312,7 +320,6 @@ const Printing = () => {
                                 <SelectContent className="bg-card border-border rounded-sm max-h-60">{brands.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
                             </Select>
                             <Input type="number" value={currentBodiesCount} onChange={(e) => setCurrentBodiesCount(e.target.value)} placeholder="Bodies" className="bg-background border-input rounded-sm font-mono" data-testid="bodies-count" />
-                            <Input type="number" value={currentSheetsUsed} onChange={(e) => setCurrentSheetsUsed(e.target.value)} placeholder="Sheets" className="bg-background border-input rounded-sm font-mono" data-testid="sheets-used" />
                             <Button type="button" onClick={handleAddEntry} className="rounded-sm" data-testid="add-entry-btn"><Plus className="w-4 h-4" /></Button>
                         </div>
                         {jobEntries.length > 0 && (
@@ -325,27 +332,24 @@ const Printing = () => {
                                                 <Badge variant="outline">{entry.size_name}</Badge>
                                                 <span className="text-sm">{entry.brand_name}</span>
                                                 <Badge variant="secondary" className="font-mono">{formatNumber(entry.bodies_count)} bodies</Badge>
-                                                <Badge variant="secondary" className="font-mono text-primary">{formatNumber(entry.sheets_used)} sheets</Badge>
                                             </div>
                                             <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => handleRemoveEntry(idx)}><Trash2 className="w-3 h-3" /></Button>
                                         </div>
                                     ))}
                                 </div>
-                                <div className="flex justify-between text-sm p-2 bg-success/10 rounded-sm border border-success/20">
-                                    <span className="font-bold uppercase tracking-wider">Total Sheets Used</span>
-                                    <span className="font-mono font-bold text-success">{formatNumber(jobEntries.reduce((sum, e) => sum + (e.sheets_used || 0), 0))}{selectedMaterial ? ` / ${formatNumber(selectedMaterial.sheets_available)}` : ''}</span>
-                                </div>
-                                <div className="flex justify-between text-sm p-2 bg-primary/10 rounded-sm border border-primary/20">
-                                    <span className="font-bold uppercase tracking-wider">Total Printing (Bodies × Sheets)</span>
-                                    <span className="font-mono font-bold text-primary">{formatNumber(jobEntries.reduce((sum, e) => sum + (e.bodies_count * (e.sheets_used || 0)), 0))}</span>
-                                </div>
+                                {sheetsNum > 0 && (
+                                    <div className="flex justify-between text-sm p-2 bg-primary/10 rounded-sm border border-primary/20">
+                                        <span className="font-bold uppercase tracking-wider">Total Printing (Bodies x Sheets)</span>
+                                        <span className="font-mono font-bold text-primary">{formatNumber(totalBodies * sheetsNum)}</span>
+                                    </div>
+                                )}
                             </div>
                         )}
                         <div className="space-y-2">
                             <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Notes</Label>
                             <Textarea value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} placeholder="Optional notes..." className="bg-background border-input rounded-sm" data-testid="job-notes" />
                         </div>
-                        <Button type="submit" className="w-full font-bold uppercase tracking-wider rounded-sm" disabled={submitting || jobEntries.length === 0 || !formData.raw_material_id} data-testid="submit-job">
+                        <Button type="submit" className="w-full font-bold uppercase tracking-wider rounded-sm" disabled={submitting || jobEntries.length === 0 || !formData.raw_material_id || !sheetsNum} data-testid="submit-job">
                             {submitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Creating...</> : 'Create Job'}
                         </Button>
                     </form>
@@ -362,14 +366,17 @@ const Printing = () => {
                             <Input type="date" value={editForm.job_date} onChange={(e) => setEditForm({ ...editForm, job_date: e.target.value })} className="bg-background border-input rounded-sm font-mono" />
                         </div>
                         {editMaterialInfo && (
-                            <div className="p-3 bg-secondary/50 rounded-sm border border-border grid grid-cols-3 gap-4 text-sm">
+                            <div className="p-3 bg-secondary/50 rounded-sm border border-border grid grid-cols-2 gap-4 text-sm">
                                 <div><p className="text-xs font-bold uppercase text-muted-foreground">Raw Material</p><p className="font-mono font-bold">{editMaterialInfo.sr_no}</p></div>
                                 <div><p className="text-xs font-bold uppercase text-muted-foreground">Size</p><p className="font-mono">{editMaterialInfo.size}</p></div>
-                                <div><p className="text-xs font-bold uppercase text-muted-foreground">Sheets</p><p className="font-mono font-bold text-primary">{formatNumber(editMaterialInfo.sheets)}</p></div>
                             </div>
                         )}
-                        <div className="border-t border-border pt-4"><Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Size, Brand, Bodies & Sheets</Label></div>
-                        <div className="grid grid-cols-5 gap-2">
+                        <div className="space-y-2">
+                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Sheets Used *</Label>
+                            <Input type="number" value={editForm.sheets_used} onChange={(e) => setEditForm({ ...editForm, sheets_used: e.target.value })} placeholder="Sheets used from raw material" className="bg-background border-input rounded-sm font-mono" />
+                        </div>
+                        <div className="border-t border-border pt-4"><Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Size, Brand & Bodies</Label></div>
+                        <div className="grid grid-cols-4 gap-2">
                             <Select value={editSizeId} onValueChange={setEditSizeId}>
                                 <SelectTrigger className="bg-background border-input rounded-sm"><SelectValue placeholder="Size" /></SelectTrigger>
                                 <SelectContent className="bg-card border-border rounded-sm">{sizes.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
@@ -379,7 +386,6 @@ const Printing = () => {
                                 <SelectContent className="bg-card border-border rounded-sm max-h-60">{brands.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
                             </Select>
                             <Input type="number" value={editBodiesCount} onChange={(e) => setEditBodiesCount(e.target.value)} placeholder="Bodies" className="bg-background border-input rounded-sm font-mono" />
-                            <Input type="number" value={editSheetsUsed} onChange={(e) => setEditSheetsUsed(e.target.value)} placeholder="Sheets" className="bg-background border-input rounded-sm font-mono" />
                             <Button type="button" onClick={handleEditAddEntry} className="rounded-sm"><Plus className="w-4 h-4" /></Button>
                         </div>
                         {editEntries.length > 0 && (
@@ -392,27 +398,24 @@ const Printing = () => {
                                                 <Badge variant="outline">{entry.size_name}</Badge>
                                                 <span className="text-sm">{entry.brand_name}</span>
                                                 <Badge variant="secondary" className="font-mono">{formatNumber(entry.bodies_count)} bodies</Badge>
-                                                <Badge variant="secondary" className="font-mono text-primary">{formatNumber(entry.sheets_used || 0)} sheets</Badge>
                                             </div>
                                             <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => setEditEntries(editEntries.filter((_, i) => i !== idx))}><Trash2 className="w-3 h-3" /></Button>
                                         </div>
                                     ))}
                                 </div>
-                                <div className="flex justify-between text-sm p-2 bg-success/10 rounded-sm border border-success/20">
-                                    <span className="font-bold uppercase tracking-wider">Total Sheets Used</span>
-                                    <span className="font-mono font-bold text-success">{formatNumber(editEntries.reduce((sum, e) => sum + (e.sheets_used || 0), 0))}</span>
-                                </div>
-                                <div className="flex justify-between text-sm p-2 bg-primary/10 rounded-sm border border-primary/20">
-                                    <span className="font-bold uppercase tracking-wider">Total Printing (Bodies x Sheets)</span>
-                                    <span className="font-mono font-bold text-primary">{formatNumber(editEntries.reduce((sum, e) => sum + (e.bodies_count * (e.sheets_used || 0)), 0))}</span>
-                                </div>
+                                {parseInt(editForm.sheets_used) > 0 && (
+                                    <div className="flex justify-between text-sm p-2 bg-primary/10 rounded-sm border border-primary/20">
+                                        <span className="font-bold uppercase tracking-wider">Total Printing (Bodies x Sheets)</span>
+                                        <span className="font-mono font-bold text-primary">{formatNumber(editEntries.reduce((sum, e) => sum + e.bodies_count, 0) * parseInt(editForm.sheets_used))}</span>
+                                    </div>
+                                )}
                             </div>
                         )}
                         <div className="space-y-2">
                             <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Notes</Label>
                             <Textarea value={editForm.notes} onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })} placeholder="Optional notes..." className="bg-background border-input rounded-sm" />
                         </div>
-                        <Button type="submit" className="w-full font-bold uppercase tracking-wider rounded-sm" disabled={submitting || editEntries.length === 0}>
+                        <Button type="submit" className="w-full font-bold uppercase tracking-wider rounded-sm" disabled={submitting || editEntries.length === 0 || !parseInt(editForm.sheets_used)}>
                             {submitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</> : 'Update Job'}
                         </Button>
                     </form>

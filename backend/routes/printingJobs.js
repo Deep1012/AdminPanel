@@ -21,7 +21,7 @@ async function generateJobNumber() {
 
 router.post("/", authenticate, async (req, res) => {
   try {
-    const { raw_material_id, sizes, notes, job_date } = req.body;
+    const { raw_material_id, sizes, notes, job_date, sheets_used } = req.body;
     const id = uuidv4();
     const now = job_date || new Date().toISOString();
 
@@ -36,19 +36,27 @@ router.post("/", authenticate, async (req, res) => {
     }
 
     let total_bodies = 0;
-    let total_sheets_used = 0;
     for (const sizeEntry of sizes) {
       for (const brand of sizeEntry.brands) {
         total_bodies += brand.bodies_count;
-        total_sheets_used += brand.sheets_used || 0;
+      }
+    }
+
+    // Accept sheets_used at job level; fall back to summing per-entry for backward compat
+    let total_sheets_used = sheets_used || 0;
+    if (!total_sheets_used) {
+      for (const sizeEntry of sizes) {
+        for (const brand of sizeEntry.brands) {
+          total_sheets_used += brand.sheets_used || 0;
+        }
       }
     }
 
     if (total_sheets_used <= 0) {
-      return res.status(400).json({ detail: "Please specify sheets used for each entry" });
+      return res.status(400).json({ detail: "Please specify sheets used" });
     }
     if (total_sheets_used > sheets_available) {
-      return res.status(400).json({ detail: `Total sheets used (${total_sheets_used}) exceeds available sheets (${sheets_available})` });
+      return res.status(400).json({ detail: `Sheets used (${total_sheets_used}) exceeds available sheets (${sheets_available})` });
     }
 
     const job_number = await generateJobNumber();
@@ -67,7 +75,6 @@ router.post("/", authenticate, async (req, res) => {
       created_by: req.user.username,
     });
 
-    // Update raw material sheets_used by the sum of per-line sheets_used
     await Purchase.updateOne(
       { id: raw_material_id },
       { $inc: { sheets_used: total_sheets_used } }
@@ -105,7 +112,7 @@ router.get("/", authenticate, async (req, res) => {
 
 router.put("/:jobId", authenticate, async (req, res) => {
   try {
-    const { notes, job_date, sizes } = req.body;
+    const { notes, job_date, sizes, sheets_used } = req.body;
     const updateData = {};
     if (notes !== undefined) updateData.notes = notes;
     if (job_date !== undefined) updateData.job_date = job_date;
@@ -114,15 +121,23 @@ router.put("/:jobId", authenticate, async (req, res) => {
       if (!job) return res.status(404).json({ detail: "Job not found" });
 
       let total_bodies = 0;
-      let newTotalSheets = 0;
       for (const sizeEntry of sizes) {
         for (const brand of sizeEntry.brands) {
           total_bodies += brand.bodies_count;
-          newTotalSheets += brand.sheets_used || 0;
         }
       }
       updateData.sizes = sizes;
       updateData.total_bodies = total_bodies;
+
+      // Accept sheets_used at job level; fall back to summing per-entry
+      let newTotalSheets = sheets_used || 0;
+      if (!newTotalSheets) {
+        for (const sizeEntry of sizes) {
+          for (const brand of sizeEntry.brands) {
+            newTotalSheets += brand.sheets_used || 0;
+          }
+        }
+      }
 
       const oldSheets = job.sheets_from_material || 0;
       if (newTotalSheets > 0) {
