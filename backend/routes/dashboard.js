@@ -313,13 +313,14 @@ router.get("/finished-goods-list", authenticate, async (req, res) => {
 // Global export - return all exportable data in one call
 router.get("/export-all", authenticate, async (req, res) => {
   try {
+    const ROW_LIMIT = 10000;
     const [purchases, printingJobs, production, dispatches, purchaseOrders, customers] = await Promise.all([
-      Purchase.find({}, { _id: 0, __v: 0 }).sort({ purchase_date: -1 }).lean(),
-      PrintingJob.find({}, { _id: 0, __v: 0 }).sort({ job_date: -1 }).lean(),
-      Production.find({}, { _id: 0, __v: 0 }).sort({ production_date: -1 }).lean(),
-      Dispatch.find({}, { _id: 0, __v: 0 }).sort({ dispatch_date: -1 }).lean(),
-      PurchaseOrder.find({}, { _id: 0, __v: 0 }).sort({ date: -1 }).lean(),
-      require("../models/Customer").find({}, { _id: 0, __v: 0 }).sort({ name: 1 }).lean(),
+      Purchase.find({}, { _id: 0, __v: 0 }).sort({ purchase_date: -1 }).limit(ROW_LIMIT).lean(),
+      PrintingJob.find({}, { _id: 0, __v: 0 }).sort({ job_date: -1 }).limit(ROW_LIMIT).lean(),
+      Production.find({}, { _id: 0, __v: 0 }).sort({ production_date: -1 }).limit(ROW_LIMIT).lean(),
+      Dispatch.find({}, { _id: 0, __v: 0 }).sort({ dispatch_date: -1 }).limit(ROW_LIMIT).lean(),
+      PurchaseOrder.find({}, { _id: 0, __v: 0 }).sort({ date: -1 }).limit(ROW_LIMIT).lean(),
+      require("../models/Customer").find({}, { _id: 0, __v: 0 }).sort({ name: 1 }).limit(ROW_LIMIT).lean(),
     ]);
 
     res.json({ purchases, printingJobs, production, dispatches, purchaseOrders, customers });

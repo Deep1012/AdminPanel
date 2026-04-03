@@ -48,6 +48,11 @@ async function createBackup(triggerUser) {
   const jsonStr = JSON.stringify(collections);
   const size_bytes = Buffer.byteLength(jsonStr, "utf8");
 
+  const MAX_BACKUP_SIZE = 15 * 1024 * 1024; // 15MB (MongoDB 16MB doc limit)
+  if (size_bytes > MAX_BACKUP_SIZE) {
+    throw new Error(`Backup too large (${(size_bytes / 1024 / 1024).toFixed(1)}MB). Data exceeds storage limit.`);
+  }
+
   const backup = await Backup.create({
     id: uuidv4(),
     timestamp: new Date(),
@@ -56,6 +61,12 @@ async function createBackup(triggerUser) {
     record_counts,
     size_bytes,
   });
+
+  // Auto-prune: keep only 12 most recent backups
+  const oldBackups = await Backup.find({}, { id: 1 }).sort({ timestamp: -1 }).skip(12).lean();
+  if (oldBackups.length > 0) {
+    await Backup.deleteMany({ id: { $in: oldBackups.map(b => b.id) } });
+  }
 
   if (triggerUser) {
     logActivity({ action: "BACKUP", entity_type: "backup", entity_id: backup.id, user: triggerUser, details: `Manual backup created (${(size_bytes / 1024).toFixed(1)} KB)` });

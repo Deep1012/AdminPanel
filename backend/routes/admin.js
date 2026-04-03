@@ -43,10 +43,16 @@ router.get("/activity-logs", authenticate, adminRequired, async (req, res) => {
   try {
     const { action, entity_type, username, from, to, page = 1, limit = 50 } = req.query;
 
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 50));
+
     const filter = {};
     if (action) filter.action = action;
     if (entity_type) filter.entity_type = entity_type;
-    if (username) filter.username = { $regex: username, $options: "i" };
+    if (username) {
+      const escaped = String(username).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      filter.username = { $regex: escaped, $options: "i" };
+    }
     if (from || to) {
       filter.timestamp = {};
       if (from) filter.timestamp.$gte = new Date(from);
@@ -57,13 +63,13 @@ router.get("/activity-logs", authenticate, adminRequired, async (req, res) => {
       }
     }
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const skip = (pageNum - 1) * limitNum;
 
     const [logs, total] = await Promise.all([
       ActivityLog.find(filter, { _id: 0, __v: 0 })
         .sort({ timestamp: -1 })
         .skip(skip)
-        .limit(parseInt(limit))
+        .limit(limitNum)
         .lean(),
       ActivityLog.countDocuments(filter),
     ]);
@@ -71,9 +77,9 @@ router.get("/activity-logs", authenticate, adminRequired, async (req, res) => {
     res.json({
       logs,
       total,
-      page: parseInt(page),
-      limit: parseInt(limit),
-      totalPages: Math.ceil(total / parseInt(limit)),
+      page: pageNum,
+      limit: limitNum,
+      totalPages: Math.ceil(total / limitNum),
     });
   } catch (error) {
     res.status(500).json({ detail: error.message });

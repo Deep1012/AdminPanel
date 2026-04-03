@@ -26,8 +26,8 @@ async function logActivity({ action, entity_type, entity_id, entity_label, user,
       ip_address: ip_address || null,
       timestamp: new Date(),
     });
-  } catch {
-    // Activity logging should never break the main operation
+  } catch (error) {
+    console.error("[ActivityLogger] Failed to log activity:", { action, entity_type, error: error.message });
   }
 }
 

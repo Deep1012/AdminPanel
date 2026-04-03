@@ -13,8 +13,9 @@ async function generateSerialNo(dateStr) {
   const dateKey = d.toISOString().split("T")[0].replace(/-/g, "");
   const prefix = `PO-${dateKey}-`;
 
+  const escapedPrefix = prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const lastPO = await PurchaseOrder.findOne(
-    { serial_no: { $regex: `^${prefix}` } },
+    { serial_no: { $regex: `^${escapedPrefix}` } },
     { serial_no: 1 }
   ).sort({ serial_no: -1 }).lean();
 
