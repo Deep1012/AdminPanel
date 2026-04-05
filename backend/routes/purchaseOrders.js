@@ -90,6 +90,10 @@ router.put("/:poId", authenticate, async (req, res) => {
       return res.status(404).json({ detail: "Purchase order not found" });
     }
 
+    if (existingPO.is_completed) {
+      return res.status(400).json({ detail: "Cannot modify a completed purchase order. Reopen it first." });
+    }
+
     const updateData = {
       updated_by: req.user.username,
       updated_at: new Date().toISOString(),
