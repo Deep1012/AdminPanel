@@ -86,6 +86,7 @@ export const purchaseOrdersAPI = {
     create: (data) => api.post('/purchase-orders', data),
     update: (id, data) => api.put(`/purchase-orders/${id}`, data),
     delete: (id) => api.delete(`/purchase-orders/${id}`),
+    toggleComplete: (id) => api.put(`/purchase-orders/${id}/complete`),
 };
 
 export const customersAPI = {

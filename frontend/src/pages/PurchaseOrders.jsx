@@ -6,7 +6,6 @@ import { Label } from '../components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Badge } from '../components/ui/badge';
-import { Textarea } from '../components/ui/textarea';
 import ConfirmDialog from '../components/ConfirmDialog';
 import TableSearch from '../components/TableSearch';
 import TablePagination from '../components/TablePagination';
@@ -17,7 +16,7 @@ import { useTableSort } from '../hooks/useTableSort';
 import { purchaseOrdersAPI, brandsAPI, sizesAPI, customersAPI } from '../lib/api';
 import SearchableSelect from '../components/SearchableSelect';
 import { formatDate, formatNumber, parseImportDate } from '../lib/utils';
-import { Plus, Trash2, Pencil, ClipboardList, Loader2, AlertCircle, Download } from 'lucide-react';
+import { Plus, Trash2, Pencil, ClipboardList, Loader2, AlertCircle, Download, Check, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 import { exportToExcel } from '../lib/exportToExcel';
 import ImportExcelButton from '../components/ImportExcelButton';
@@ -30,14 +29,10 @@ const PO_EXPORT_COLUMNS = [
     { header: 'Size', key: 'size_name' },
     { header: 'Quantity', key: 'quantity' },
     { header: 'Dispatched', key: 'quantity_dispatched' },
+    { header: 'Pending', key: 'quantity', transform: (v, row) => Math.max(0, (row.quantity || 0) - (row.quantity_dispatched || 0)) },
+    { header: 'Status', key: 'is_completed', transform: (v) => v ? 'Completed' : 'Active' },
     { header: 'Created By', key: 'created_by' },
-    { header: 'Updated By', key: 'updated_by', transform: (v) => v || '-' },
 ];
-
-const emptyForm = {
-    company_name: '', brand_id: '', size_id: '', quantity: '', notes: '',
-    date: new Date().toISOString().split('T')[0]
-};
 
 const PurchaseOrders = () => {
     const [orders, setOrders] = useState([]);
@@ -48,20 +43,38 @@ const PurchaseOrders = () => {
     const [dialogOpen, setDialogOpen] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [editingId, setEditingId] = useState(null);
-    const [formData, setFormData] = useState({ ...emptyForm });
     const [deleteTarget, setDeleteTarget] = useState(null);
+    const [activeTab, setActiveTab] = useState('active');
+
+    // Multi-item form state
+    const [formCompany, setFormCompany] = useState('');
+    const [formDate, setFormDate] = useState(new Date().toISOString().split('T')[0]);
+    const [currentBrandId, setCurrentBrandId] = useState('');
+    const [currentSizeId, setCurrentSizeId] = useState('');
+    const [currentQuantity, setCurrentQuantity] = useState('');
+    const [formItems, setFormItems] = useState([]);
+
+    // Single-item edit form (for editing existing PO)
+    const [editForm, setEditForm] = useState({ company_name: '', brand_id: '', size_id: '', quantity: '', notes: '', date: '' });
 
     const [searchTerm, setSearchTerm] = useState('');
     const [dateFrom, setDateFrom] = useState('');
     const [dateTo, setDateTo] = useState('');
+    const [filterCompany, setFilterCompany] = useState('');
+
+    // Split orders into active and completed
+    const activeOrders = useMemo(() => orders.filter(o => !o.is_completed), [orders]);
+    const completedOrders = useMemo(() => orders.filter(o => o.is_completed), [orders]);
+    const currentOrders = activeTab === 'active' ? activeOrders : completedOrders;
 
     const filters = useMemo(() => [
         ...(dateFrom ? [{ key: 'date', value: dateFrom, type: 'dateFrom' }] : []),
         ...(dateTo ? [{ key: 'date', value: dateTo, type: 'dateTo' }] : []),
-    ], [dateFrom, dateTo]);
+        ...(filterCompany ? [{ key: 'company_name', value: filterCompany, type: 'exact' }] : []),
+    ], [dateFrom, dateTo, filterCompany]);
 
     const filteredOrders = useTableFilter({
-        data: orders, searchTerm, searchFields: ['serial_no', 'company_name', 'brand_name', 'size_name'], filters
+        data: currentOrders, searchTerm, searchFields: ['serial_no', 'company_name', 'brand_name', 'size_name'], filters
     });
 
     const { sortedData, sortKey, sortDir, requestSort } = useTableSort({
@@ -69,6 +82,12 @@ const PurchaseOrders = () => {
     });
 
     const { paginatedData: paginatedOrders, currentPage, totalPages, pageSize, setCurrentPage, setPageSize, startIndex, PAGE_SIZE_OPTIONS } = usePagination({ data: sortedData });
+
+    // Unique companies for filter dropdown
+    const companyOptions = useMemo(() => {
+        const names = [...new Set(orders.map(o => o.company_name))].sort();
+        return names.map(n => ({ value: n, label: n }));
+    }, [orders]);
 
     useEffect(() => { fetchData(); }, []);
 
@@ -83,10 +102,17 @@ const PurchaseOrders = () => {
         finally { setLoading(false); }
     };
 
-    const openCreate = () => { setEditingId(null); setFormData({ ...emptyForm }); setDialogOpen(true); };
+    const resetForm = () => {
+        setFormCompany(''); setFormDate(new Date().toISOString().split('T')[0]);
+        setCurrentBrandId(''); setCurrentSizeId(''); setCurrentQuantity('');
+        setFormItems([]);
+    };
+
+    const openCreate = () => { setEditingId(null); resetForm(); setDialogOpen(true); };
+
     const openEdit = (po) => {
         setEditingId(po.id);
-        setFormData({
+        setEditForm({
             company_name: po.company_name, brand_id: po.brand_id || '', size_id: po.size_id || '',
             quantity: String(po.quantity), notes: po.notes || '',
             date: po.date ? po.date.split('T')[0] : new Date().toISOString().split('T')[0],
@@ -94,25 +120,59 @@ const PurchaseOrders = () => {
         setDialogOpen(true);
     };
 
-    const handleSubmit = async (e) => {
+    const handleAddItem = () => {
+        if (!currentBrandId || !currentSizeId || !currentQuantity) { toast.error('Please select brand, size and enter quantity'); return; }
+        const brand = brands.find(b => b.id === currentBrandId);
+        const size = sizes.find(s => s.id === currentSizeId);
+        if (!brand || !size) return;
+        setFormItems([...formItems, {
+            brand_id: brand.id, brand_name: brand.name,
+            size_id: size.id, size_name: size.name,
+            quantity: parseInt(currentQuantity),
+        }]);
+        setCurrentBrandId(''); setCurrentSizeId(''); setCurrentQuantity('');
+    };
+
+    const handleRemoveItem = (index) => { setFormItems(formItems.filter((_, i) => i !== index)); };
+
+    const handleSubmitCreate = async (e) => {
         e.preventDefault();
-        if (!formData.company_name || !formData.brand_id || !formData.size_id || !formData.quantity) {
+        if (!formCompany || formItems.length === 0) { toast.error('Please select customer and add at least one item'); return; }
+        setSubmitting(true);
+        try {
+            for (const item of formItems) {
+                await purchaseOrdersAPI.create({
+                    date: new Date(formDate).toISOString(),
+                    company_name: formCompany,
+                    brand_id: item.brand_id, brand_name: item.brand_name,
+                    size_id: item.size_id, size_name: item.size_name,
+                    quantity: item.quantity,
+                });
+            }
+            toast.success(`${formItems.length} purchase order(s) created`);
+            setDialogOpen(false); resetForm(); fetchData();
+        } catch (err) { toast.error(err.response?.data?.detail || 'Failed to create orders'); }
+        finally { setSubmitting(false); }
+    };
+
+    const handleSubmitEdit = async (e) => {
+        e.preventDefault();
+        if (!editForm.company_name || !editForm.brand_id || !editForm.size_id || !editForm.quantity) {
             toast.error('Please fill all required fields'); return;
         }
         setSubmitting(true);
         try {
-            const brand = brands.find(b => b.id === formData.brand_id);
-            const size = sizes.find(s => s.id === formData.size_id);
-            const payload = {
-                date: new Date(formData.date).toISOString(),
-                company_name: formData.company_name,
-                brand_id: formData.brand_id, brand_name: brand?.name || '',
-                size_id: formData.size_id, size_name: size?.name || '',
-                quantity: parseInt(formData.quantity),
-                notes: formData.notes || null,
-            };
-            if (editingId) { await purchaseOrdersAPI.update(editingId, payload); toast.success('Order updated'); }
-            else { await purchaseOrdersAPI.create(payload); toast.success('Purchase order created'); }
+            const brand = brands.find(b => b.id === editForm.brand_id);
+            const size = sizes.find(s => s.id === editForm.size_id);
+            await purchaseOrdersAPI.update(editingId, {
+                date: new Date(editForm.date).toISOString(),
+                company_name: editForm.company_name,
+                brand_id: editForm.brand_id, brand_name: brand?.name || '',
+                size_id: editForm.size_id, size_name: size?.name || '',
+                quantity: parseInt(editForm.quantity),
+                notes: editForm.notes || null,
+            });
+            toast.success('Order updated');
             setDialogOpen(false); fetchData();
         } catch (err) { toast.error(err.response?.data?.detail || 'Failed to save order'); }
         finally { setSubmitting(false); }
@@ -125,10 +185,19 @@ const PurchaseOrders = () => {
         finally { setDeleteTarget(null); }
     };
 
-    const clearFilters = () => { setSearchTerm(''); setDateFrom(''); setDateTo(''); };
+    const handleToggleComplete = async (po) => {
+        try {
+            await purchaseOrdersAPI.toggleComplete(po.id);
+            toast.success(po.is_completed ? 'Order reopened' : 'Order marked as completed');
+            fetchData();
+        } catch (err) { toast.error('Failed to update status'); }
+    };
 
-    const totalOrders = orders.length;
-    const totalQuantity = orders.reduce((sum, o) => sum + (o.quantity || 0), 0);
+    const clearFilters = () => { setSearchTerm(''); setDateFrom(''); setDateTo(''); setFilterCompany(''); };
+
+    const totalOrders = activeOrders.length;
+    const totalQuantity = activeOrders.reduce((sum, o) => sum + (o.quantity || 0), 0);
+    const totalPending = activeOrders.reduce((sum, o) => sum + Math.max(0, (o.quantity || 0) - (o.quantity_dispatched || 0)), 0);
 
     return (
         <div className="space-y-6 animate-fade-in" data-testid="purchase-orders-page">
@@ -181,55 +250,112 @@ const PurchaseOrders = () => {
                 </div>
             </div>
 
-            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                <DialogContent className="bg-card border-border rounded-sm max-w-md">
+            {/* Create Dialog (multi-item) */}
+            <Dialog open={dialogOpen && !editingId} onOpenChange={(open) => { if (!open) { setDialogOpen(false); resetForm(); } }}>
+                <DialogContent className="bg-card border-border rounded-sm max-w-xl max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
-                        <DialogTitle className="font-display text-xl font-bold tracking-tight uppercase">
-                            {editingId ? 'Edit Purchase Order' : 'New Purchase Order'}
-                        </DialogTitle>
+                        <DialogTitle className="font-display text-xl font-bold tracking-tight uppercase">New Purchase Order</DialogTitle>
                     </DialogHeader>
-                    <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+                    <form onSubmit={handleSubmitCreate} className="space-y-4 mt-4">
                         <div className="space-y-2">
                             <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Date *</Label>
-                            <Input type="date" value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })} className="bg-background border-input rounded-sm font-mono" data-testid="po-date" />
+                            <Input type="date" value={formDate} onChange={(e) => setFormDate(e.target.value)} className="bg-background border-input rounded-sm font-mono" data-testid="po-date" />
                         </div>
                         <div className="space-y-2">
                             <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Customer *</Label>
                             <SearchableSelect
                                 options={customers.map(c => ({ value: c.name, label: c.name }))}
-                                value={formData.company_name}
-                                onValueChange={(v) => setFormData({ ...formData, company_name: v })}
+                                value={formCompany}
+                                onValueChange={setFormCompany}
                                 placeholder="Select customer"
                                 searchPlaceholder="Search customers..."
                                 data-testid="po-company"
                             />
                         </div>
+                        <div className="border-t border-border pt-4"><Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Add Items (Brand, Size, Qty)</Label></div>
+                        <div className="grid grid-cols-4 gap-2">
+                            <Select value={currentBrandId} onValueChange={setCurrentBrandId}>
+                                <SelectTrigger className="bg-background border-input rounded-sm" data-testid="po-brand"><SelectValue placeholder="Brand" /></SelectTrigger>
+                                <SelectContent className="bg-card border-border rounded-sm max-h-60">{brands.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
+                            </Select>
+                            <Select value={currentSizeId} onValueChange={setCurrentSizeId}>
+                                <SelectTrigger className="bg-background border-input rounded-sm" data-testid="po-size"><SelectValue placeholder="Size" /></SelectTrigger>
+                                <SelectContent className="bg-card border-border rounded-sm">{sizes.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+                            </Select>
+                            <Input type="number" value={currentQuantity} onChange={(e) => setCurrentQuantity(e.target.value)} placeholder="Qty" className="bg-background border-input rounded-sm font-mono" data-testid="po-quantity" />
+                            <Button type="button" onClick={handleAddItem} className="rounded-sm" data-testid="add-po-item-btn"><Plus className="w-4 h-4 mr-1" /> Add</Button>
+                        </div>
+                        {formItems.length > 0 && (
+                            <div className="space-y-2">
+                                <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Items ({formItems.length})</Label>
+                                <div className="space-y-1 max-h-40 overflow-y-auto">
+                                    {formItems.map((item, idx) => (
+                                        <div key={idx} className="flex items-center justify-between p-2 bg-secondary/50 rounded-sm">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-sm font-medium">{item.brand_name}</span>
+                                                <Badge variant="outline">{item.size_name}</Badge>
+                                                <Badge variant="secondary" className="font-mono">{formatNumber(item.quantity)} qty</Badge>
+                                            </div>
+                                            <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => handleRemoveItem(idx)}><Trash2 className="w-3 h-3" /></Button>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="flex justify-between text-sm p-2 bg-success/10 rounded-sm border border-success/20">
+                                    <span className="font-bold uppercase tracking-wider">Total Quantity</span>
+                                    <span className="font-mono font-bold text-success">{formatNumber(formItems.reduce((sum, i) => sum + (i.quantity || 0), 0))}</span>
+                                </div>
+                            </div>
+                        )}
+                        <Button type="submit" className="w-full font-bold uppercase tracking-wider rounded-sm" disabled={submitting || formItems.length === 0 || !formCompany} data-testid="submit-po-create">
+                            {submitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Creating...</> : `Create ${formItems.length} Order(s)`}
+                        </Button>
+                    </form>
+                </DialogContent>
+            </Dialog>
+
+            {/* Edit Dialog (single item) */}
+            <Dialog open={dialogOpen && !!editingId} onOpenChange={(open) => { if (!open) { setDialogOpen(false); setEditingId(null); } }}>
+                <DialogContent className="bg-card border-border rounded-sm max-w-md">
+                    <DialogHeader>
+                        <DialogTitle className="font-display text-xl font-bold tracking-tight uppercase">Edit Purchase Order</DialogTitle>
+                    </DialogHeader>
+                    <form onSubmit={handleSubmitEdit} className="space-y-4 mt-4">
+                        <div className="space-y-2">
+                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Date *</Label>
+                            <Input type="date" value={editForm.date} onChange={(e) => setEditForm({ ...editForm, date: e.target.value })} className="bg-background border-input rounded-sm font-mono" />
+                        </div>
+                        <div className="space-y-2">
+                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Customer *</Label>
+                            <SearchableSelect
+                                options={customers.map(c => ({ value: c.name, label: c.name }))}
+                                value={editForm.company_name}
+                                onValueChange={(v) => setEditForm({ ...editForm, company_name: v })}
+                                placeholder="Select customer"
+                                searchPlaceholder="Search customers..."
+                            />
+                        </div>
                         <div className="space-y-2">
                             <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Brand *</Label>
-                            <Select value={formData.brand_id} onValueChange={(v) => setFormData({ ...formData, brand_id: v })}>
-                                <SelectTrigger className="bg-background border-input rounded-sm" data-testid="po-brand"><SelectValue placeholder="Select brand" /></SelectTrigger>
+                            <Select value={editForm.brand_id} onValueChange={(v) => setEditForm({ ...editForm, brand_id: v })}>
+                                <SelectTrigger className="bg-background border-input rounded-sm"><SelectValue placeholder="Select brand" /></SelectTrigger>
                                 <SelectContent className="bg-card border-border rounded-sm max-h-60">{brands.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
                             </Select>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Size *</Label>
-                                <Select value={formData.size_id} onValueChange={(v) => setFormData({ ...formData, size_id: v })}>
-                                    <SelectTrigger className="bg-background border-input rounded-sm" data-testid="po-size"><SelectValue placeholder="Select" /></SelectTrigger>
+                                <Select value={editForm.size_id} onValueChange={(v) => setEditForm({ ...editForm, size_id: v })}>
+                                    <SelectTrigger className="bg-background border-input rounded-sm"><SelectValue placeholder="Select" /></SelectTrigger>
                                     <SelectContent className="bg-card border-border rounded-sm">{sizes.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
                                 </Select>
                             </div>
                             <div className="space-y-2">
                                 <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Quantity *</Label>
-                                <Input type="number" value={formData.quantity} onChange={(e) => setFormData({ ...formData, quantity: e.target.value })} placeholder="0" className="bg-background border-input rounded-sm font-mono" data-testid="po-quantity" />
+                                <Input type="number" value={editForm.quantity} onChange={(e) => setEditForm({ ...editForm, quantity: e.target.value })} placeholder="0" className="bg-background border-input rounded-sm font-mono" />
                             </div>
                         </div>
-                        <div className="space-y-2">
-                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Notes</Label>
-                            <Textarea value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} placeholder="Optional notes..." className="bg-background border-input rounded-sm" data-testid="po-notes" />
-                        </div>
-                        <Button type="submit" className="w-full font-bold uppercase tracking-wider rounded-sm" disabled={submitting} data-testid="submit-po">
-                            {submitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</> : (editingId ? 'Update Order' : 'Create Order')}
+                        <Button type="submit" className="w-full font-bold uppercase tracking-wider rounded-sm" disabled={submitting}>
+                            {submitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</> : 'Update Order'}
                         </Button>
                     </form>
                 </DialogContent>
@@ -237,30 +363,52 @@ const PurchaseOrders = () => {
 
             <ConfirmDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)} title="Delete Purchase Order?" description="This will permanently remove this purchase order." onConfirm={handleDelete} />
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Card className="industrial-card"><CardContent className="p-4"><div className="flex items-center gap-3"><div className="p-2 bg-primary/10 rounded-sm border border-primary/20"><ClipboardList className="w-5 h-5 text-primary" /></div><div><p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Total Orders</p><p className="font-display text-2xl font-bold">{totalOrders}</p></div></div></CardContent></Card>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <Card className="industrial-card"><CardContent className="p-4"><div className="flex items-center gap-3"><div className="p-2 bg-primary/10 rounded-sm border border-primary/20"><ClipboardList className="w-5 h-5 text-primary" /></div><div><p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Active Orders</p><p className="font-display text-2xl font-bold">{totalOrders}</p></div></div></CardContent></Card>
                 <Card className="industrial-card"><CardContent className="p-4"><div className="flex items-center gap-3"><div className="p-2 bg-success/10 rounded-sm border border-success/20"><ClipboardList className="w-5 h-5 text-success" /></div><div><p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Total Quantity</p><p className="font-display text-2xl font-bold">{formatNumber(totalQuantity)}</p></div></div></CardContent></Card>
+                <Card className="industrial-card"><CardContent className="p-4"><div className="flex items-center gap-3"><div className="p-2 bg-warning/10 rounded-sm border border-warning/20"><ClipboardList className="w-5 h-5 text-warning" /></div><div><p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Pending Qty</p><p className="font-display text-2xl font-bold">{formatNumber(totalPending)}</p></div></div></CardContent></Card>
             </div>
 
             <Card className="industrial-card">
-                <CardHeader><CardTitle className="font-display text-xl font-bold tracking-tight uppercase">Purchase Orders</CardTitle></CardHeader>
+                <CardHeader>
+                    <div className="flex items-center justify-between">
+                        <CardTitle className="font-display text-xl font-bold tracking-tight uppercase">Purchase Orders</CardTitle>
+                        <div className="flex gap-1">
+                            <button
+                                onClick={() => { setActiveTab('active'); setCurrentPage(1); }}
+                                className={`text-xs px-4 py-2 font-bold uppercase tracking-wider rounded-sm transition-colors ${activeTab === 'active' ? 'bg-primary text-primary-foreground' : 'bg-secondary/50 text-muted-foreground hover:bg-secondary hover:text-foreground'}`}
+                                data-testid="tab-active"
+                            >
+                                Active ({activeOrders.length})
+                            </button>
+                            <button
+                                onClick={() => { setActiveTab('completed'); setCurrentPage(1); }}
+                                className={`text-xs px-4 py-2 font-bold uppercase tracking-wider rounded-sm transition-colors ${activeTab === 'completed' ? 'bg-primary text-primary-foreground' : 'bg-secondary/50 text-muted-foreground hover:bg-secondary hover:text-foreground'}`}
+                                data-testid="tab-completed"
+                            >
+                                Completed ({completedOrders.length})
+                            </button>
+                        </div>
+                    </div>
+                </CardHeader>
                 <TableSearch
                     searchValue={searchTerm}
                     onSearchChange={setSearchTerm}
-                    searchPlaceholder="Search by serial no, company..."
+                    searchPlaceholder="Search by serial no, company, brand..."
                     filters={[
+                        { key: 'company', label: 'Company', type: 'select', options: companyOptions, value: filterCompany, onChange: setFilterCompany },
                         { key: 'dateFrom', label: 'From Date', type: 'date', value: dateFrom, onChange: setDateFrom },
                         { key: 'dateTo', label: 'To Date', type: 'date', value: dateTo, onChange: setDateTo },
                     ]}
                     onClear={clearFilters}
                     resultCount={filteredOrders.length}
-                    totalCount={orders.length}
+                    totalCount={currentOrders.length}
                 />
                 <CardContent className="p-0">
                     {loading ? (
                         <div className="flex items-center justify-center h-48"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
                     ) : filteredOrders.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center h-48 text-muted-foreground"><AlertCircle className="w-8 h-8 mb-2" /><p>{orders.length === 0 ? 'No purchase orders found' : 'No matching orders'}</p></div>
+                        <div className="flex flex-col items-center justify-center h-48 text-muted-foreground"><AlertCircle className="w-8 h-8 mb-2" /><p>{currentOrders.length === 0 ? `No ${activeTab} orders` : 'No matching orders'}</p></div>
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="data-table" data-testid="po-table">
@@ -270,40 +418,44 @@ const PurchaseOrders = () => {
                                     <SortableHeader label="Brand" sortKey="brand_name" currentSortKey={sortKey} currentSortDir={sortDir} onSort={requestSort} />
                                     <th>Size</th>
                                     <SortableHeader label="Qty" sortKey="quantity" currentSortKey={sortKey} currentSortDir={sortDir} onSort={requestSort} />
-                                    <th>Dispatched</th><th>By</th><th>Updated By</th><th></th></tr></thead>
+                                    <th>Dispatched</th>
+                                    <th>Pending</th>
+                                    <th>By</th>
+                                    <th></th></tr></thead>
                                 <tbody>
-                                    {paginatedOrders.map((po, idx) => (
-                                        <tr key={po.id} data-testid={`po-row-${po.id}`}>
-                                            <td className="text-muted-foreground">{startIndex + idx + 1}</td>
-                                            <td>{formatDate(po.date)}</td>
-                                            <td className="font-medium">{po.company_name}</td>
-                                            <td>{po.brand_name}</td>
-                                            <td><Badge variant="outline">{po.size_name}</Badge></td>
-                                            <td className="font-mono">{formatNumber(po.quantity)}</td>
-                                            <td>
-                                                <div className="space-y-1">
-                                                    <div className="flex justify-between text-xs font-mono">
-                                                        <span>{formatNumber(po.quantity_dispatched || 0)}</span>
-                                                        <span className="text-muted-foreground">/ {formatNumber(po.quantity)}</span>
+                                    {paginatedOrders.map((po, idx) => {
+                                        const pending = Math.max(0, (po.quantity || 0) - (po.quantity_dispatched || 0));
+                                        return (
+                                            <tr key={po.id} data-testid={`po-row-${po.id}`}>
+                                                <td className="text-muted-foreground">{startIndex + idx + 1}</td>
+                                                <td>{formatDate(po.date)}</td>
+                                                <td className="font-medium">{po.company_name}</td>
+                                                <td>{po.brand_name}</td>
+                                                <td><Badge variant="outline">{po.size_name}</Badge></td>
+                                                <td className="font-mono">{formatNumber(po.quantity)}</td>
+                                                <td className="font-mono text-success">{formatNumber(po.quantity_dispatched || 0)}</td>
+                                                <td className={`font-mono font-bold ${pending > 0 ? 'text-warning' : 'text-success'}`}>{formatNumber(pending)}</td>
+                                                <td className="text-muted-foreground">{po.created_by}</td>
+                                                <td>
+                                                    <div className="flex gap-1">
+                                                        <Button
+                                                            variant="ghost" size="icon"
+                                                            onClick={() => handleToggleComplete(po)}
+                                                            className={po.is_completed ? 'text-muted-foreground hover:text-warning' : 'text-muted-foreground hover:text-success'}
+                                                            title={po.is_completed ? 'Reopen order' : 'Mark as completed'}
+                                                            data-testid={`complete-po-${po.id}`}
+                                                        >
+                                                            {po.is_completed ? <RotateCcw className="w-4 h-4" /> : <Check className="w-4 h-4" />}
+                                                        </Button>
+                                                        {!po.is_completed && (
+                                                            <Button variant="ghost" size="icon" onClick={() => openEdit(po)} className="text-muted-foreground hover:text-primary"><Pencil className="w-4 h-4" /></Button>
+                                                        )}
+                                                        <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(po.id)} className="text-muted-foreground hover:text-destructive"><Trash2 className="w-4 h-4" /></Button>
                                                     </div>
-                                                    <div className="w-full h-2 bg-secondary rounded-sm overflow-hidden">
-                                                        <div
-                                                            className="h-full bg-primary rounded-sm transition-all"
-                                                            style={{ width: `${Math.min(100, ((po.quantity_dispatched || 0) / po.quantity) * 100)}%` }}
-                                                        />
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td className="text-muted-foreground">{po.created_by}</td>
-                                            <td className="text-muted-foreground">{po.updated_by || '-'}</td>
-                                            <td>
-                                                <div className="flex gap-1">
-                                                    <Button variant="ghost" size="icon" onClick={() => openEdit(po)} className="text-muted-foreground hover:text-primary"><Pencil className="w-4 h-4" /></Button>
-                                                    <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(po.id)} className="text-muted-foreground hover:text-destructive"><Trash2 className="w-4 h-4" /></Button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </div>

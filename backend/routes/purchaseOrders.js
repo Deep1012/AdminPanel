@@ -120,6 +120,32 @@ router.put("/:poId", authenticate, async (req, res) => {
   }
 });
 
+// PUT mark purchase order as completed / uncompleted
+router.put("/:poId/complete", authenticate, async (req, res) => {
+  try {
+    const po = await PurchaseOrder.findOne({ id: req.params.poId }).lean();
+    if (!po) return res.status(404).json({ detail: "Purchase order not found" });
+
+    const newStatus = !po.is_completed;
+    const updateData = {
+      is_completed: newStatus,
+      completed_at: newStatus ? new Date().toISOString() : null,
+      completed_by: newStatus ? req.user.username : null,
+      updated_by: req.user.username,
+      updated_at: new Date().toISOString(),
+    };
+
+    await PurchaseOrder.updateOne({ id: req.params.poId }, { $set: updateData });
+
+    logActivity({ action: "UPDATE", entity_type: "purchase_order", entity_id: req.params.poId, entity_label: po.serial_no, user: req.user, details: `${newStatus ? 'Completed' : 'Reopened'} PO ${po.serial_no}`, ip_address: req.ip });
+
+    const updated = await PurchaseOrder.findOne({ id: req.params.poId }, { _id: 0, __v: 0 }).lean();
+    res.json(updated);
+  } catch (error) {
+    res.status(500).json({ detail: error.message });
+  }
+});
+
 // DELETE purchase order
 router.delete("/:poId", authenticate, async (req, res) => {
   try {
