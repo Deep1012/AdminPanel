@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: timestin-crm-backend-backup
+    runtime: node
+    region: singapore
+    plan: free
+    branch: main
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: MONGO_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: CORS_ORIGINS
+        value: "*"
+      - key: NODE_ENV
+        value: production

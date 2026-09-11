@@ -48,7 +48,7 @@ async function createBackup(triggerUser) {
   const jsonStr = JSON.stringify(collections);
   const size_bytes = Buffer.byteLength(jsonStr, "utf8");
 
-  const MAX_BACKUP_SIZE = 15 * 1024 * 1024; // 15MB (MongoDB 16MB doc limit)
+  const MAX_BACKUP_SIZE = process.env.VERCEL ? 4 * 1024 * 1024 : 15 * 1024 * 1024; // 4MB on Vercel (4.5MB response limit), 15MB otherwise
   if (size_bytes > MAX_BACKUP_SIZE) {
     throw new Error(`Backup too large (${(size_bytes / 1024 / 1024).toFixed(1)}MB). Data exceeds storage limit.`);
   }
@@ -74,6 +74,20 @@ async function createBackup(triggerUser) {
 
   return backup;
 }
+
+// POST /api/backups/cron - Vercel Cron monthly backup endpoint
+router.post("/cron", async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+      return res.status(401).json({ detail: "Unauthorized" });
+    }
+    const backup = await createBackup(null);
+    res.json({ message: "Monthly backup created", id: backup.id, size_bytes: backup.size_bytes });
+  } catch (error) {
+    res.status(500).json({ detail: error.message });
+  }
+});
 
 // GET /api/backups - list all backups (without full data)
 router.get("/", authenticate, adminRequired, async (req, res) => {

@@ -22,11 +22,32 @@ const app = express();
 const PORT = process.env.PORT || 8001;
 
 // Middleware
+// CORS handled via vercel.json headers on Vercel; Express cors for local dev
+const allowedOrigins = (process.env.CORS_ORIGINS || "http://localhost:3000").split(",");
 app.use(cors({
-  origin: process.env.CORS_ORIGINS === "*" ? "*" : process.env.CORS_ORIGINS.split(","),
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(null, false);
+    }
+  },
   credentials: true,
 }));
 app.use(express.json({ limit: "10mb" }));
+
+// Ensure DB connection before handling requests (for serverless)
+app.use(async (req, res, next) => {
+  if (req.method === "OPTIONS" || req.path === "/api/health") {
+    return next();
+  }
+  try {
+    await connectDB();
+    next();
+  } catch (err) {
+    res.status(500).json({ detail: "Database connection failed" });
+  }
+});
 
 // Routes
 app.use("/api/auth", authRoutes);
@@ -53,32 +74,37 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "healthy" });
 });
 
-// Cron jobs
-const cron = require("node-cron");
-const RENDER_URL = process.env.RENDER_EXTERNAL_URL || "https://timestin-crm-backend.onrender.com";
+// Cron jobs and server start only when NOT running on Vercel (serverless)
+if (!process.env.VERCEL) {
+  const cron = require("node-cron");
+  const RENDER_URL = process.env.RENDER_EXTERNAL_URL || "https://timestin-crm-backend.onrender.com";
 
-// Keep-alive: self-ping every 14 minutes to prevent Render free tier spin-down
-cron.schedule("*/14 * * * *", () => {
-  fetch(`${RENDER_URL}/api/health`).catch(() => {});
-});
-
-// Monthly data backup - runs at midnight on the 1st of every month
-const { createBackup } = require("./routes/backup");
-cron.schedule("0 0 1 * *", async () => {
-  try {
-    const backup = await createBackup(null);
-    console.log(`[CRON] Monthly backup created: ${backup.id} (${(backup.size_bytes / 1024).toFixed(1)} KB)`);
-  } catch (err) {
-    console.error("[CRON] Monthly backup failed:", err.message);
-  }
-});
-
-// Start server
-connectDB().then(() => {
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on 0.0.0.0:${PORT}`);
+  // Keep-alive: self-ping every 14 minutes to prevent Render free tier spin-down
+  cron.schedule("*/14 * * * *", () => {
+    fetch(`${RENDER_URL}/api/health`).catch(() => {});
   });
-}).catch((err) => {
-  console.error("Failed to connect to MongoDB:", err.message);
-  process.exit(1);
-});
+
+  // Monthly data backup - runs at midnight on the 1st of every month
+  const { createBackup } = require("./routes/backup");
+  cron.schedule("0 0 1 * *", async () => {
+    try {
+      const backup = await createBackup(null);
+      console.log(`[CRON] Monthly backup created: ${backup.id} (${(backup.size_bytes / 1024).toFixed(1)} KB)`);
+    } catch (err) {
+      console.error("[CRON] Monthly backup failed:", err.message);
+    }
+  });
+
+  // Start server
+  connectDB().then(() => {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server running on 0.0.0.0:${PORT}`);
+    });
+  }).catch((err) => {
+    console.error("Failed to connect to MongoDB:", err.message);
+    process.exit(1);
+  });
+}
+
+// Export for Vercel serverless
+module.exports = app;

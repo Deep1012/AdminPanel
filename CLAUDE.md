@@ -85,7 +85,7 @@ Node.js + Express + Mongoose. Structured into models, routes, middleware, and co
 
 **Auth:** JWT (HS256) with Bearer tokens. 24h expiry. Two roles: `admin` and `user`.
 
-**Env vars:** `MONGO_URL`, `JWT_SECRET`, `CORS_ORIGINS`, `PORT`
+**Env vars:** `MONGO_URL`, `JWT_SECRET`, `CORS_ORIGINS`, `CRON_SECRET`, `PORT`
 
 ### Frontend (`frontend/`)
 React 19 + CRA (via craco) + Tailwind CSS 3 + shadcn/ui (new-york style, JSX not TSX).
@@ -119,9 +119,11 @@ Dark industrial theme ("Tactical Factory"). Safety orange primary (`#ea580c`), d
 - **LWBF Toggle** (`/brands` page) — Admin toggles which brands trigger LWBF cascade in production.
 
 ### Deployment
-- **Backend:** Render (auto-deploy on push) — https://timestin-crm-backend.onrender.com
+- **Backend:** Vercel (serverless, manual deploy via CLI) — https://timestin-backend.vercel.app
 - **Frontend:** Netlify (manual deploy via CLI) — https://timestin-crm.netlify.app
-- **Deploy frontend:** `cd frontend && REACT_APP_BACKEND_URL=https://timestin-crm-backend.onrender.com npx craco build && npx netlify-cli deploy --prod --dir=build --site=6e3e1c00-9360-4154-85f6-4bfe7e75c2a7 --no-build`
+- **Deploy backend:** `cd backend && npx vercel deploy --prod --yes`
+- **Deploy frontend:** `cd frontend && REACT_APP_BACKEND_URL=https://timestin-backend.vercel.app npx craco build && npx netlify-cli deploy --prod --dir=build --site=6e3e1c00-9360-4154-85f6-4bfe7e75c2a7 --no-build`
+- **Vercel Cron:** Monthly backup runs on 1st of each month via `/api/backups/cron`
 
 ## Conventions
 - Forms use react-hook-form + zod validation
