@@ -4,6 +4,7 @@ const Production = require("../models/Production");
 const PrintingJob = require("../models/PrintingJob");
 const Brand = require("../models/Brand");
 const { authenticate } = require("../middleware/auth");
+const { applyAvailabilityPolicy } = require("../lib/availabilityPolicy");
 const { logActivity } = require("../lib/activityLogger");
 const { printingAvailability, availableFor } = require("../lib/availability");
 const { toNumber } = require("../lib/stock");
@@ -59,9 +60,13 @@ router.post("/", authenticate, async (req, res) => {
 
       const available = availableFor(printingAvailability(jobs, productions), size_name, brand_name);
       if (stockUsed > available) {
-        return res.status(400).json({
+        // Reported, not rejected — see lib/availabilityPolicy.js for why.
+        const decision = applyAvailabilityPolicy({
           detail: `Printing stock used (${stockUsed}) exceeds available printing stock (${available}) for ${brand_name} ${size_name}`,
         });
+        if (decision.reject) {
+          return res.status(400).json({ detail: decision.detail });
+        }
       }
     }
 

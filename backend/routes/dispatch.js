@@ -19,6 +19,7 @@ const {
   resolvePoIds,
   findFinishedGoodsShortage,
 } = require("../lib/dispatchRequest");
+const { applyAvailabilityPolicy } = require("../lib/availabilityPolicy");
 
 const router = express.Router();
 
@@ -75,9 +76,13 @@ router.post("/", authenticate, async (req, res) => {
       dispatchModel: Dispatch,
     });
     if (shortage) {
-      return res.status(400).json({
+      // Reported, not rejected — see lib/availabilityPolicy.js for why.
+      const decision = applyAvailabilityPolicy({
         detail: `Dispatch qty (${shortage.quantity}) for ${shortage.brand_name} ${shortage.size_name} exceeds finished goods available (${shortage.available})`,
       });
+      if (decision.reject) {
+        return res.status(400).json({ detail: decision.detail });
+      }
     }
 
     // Phase 2: PO counters move BEFORE the dispatch row exists, on purpose.
@@ -189,9 +194,13 @@ router.put("/:dispatchId", authenticate, async (req, res) => {
       dispatchModel: Dispatch,
     });
     if (shortage) {
-      return res.status(400).json({
+      // Reported, not rejected — see lib/availabilityPolicy.js for why.
+      const decision = applyAvailabilityPolicy({
         detail: `Additional qty (${shortage.quantity}) for ${shortage.brand_name} ${shortage.size_name} exceeds finished goods available (${shortage.available})`,
       });
+      if (decision.reject) {
+        return res.status(400).json({ detail: decision.detail });
+      }
     }
 
     // Phase 2: ONE net apply. This handler used to reverse every old PO sync,
