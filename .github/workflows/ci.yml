@@ -17,11 +17,11 @@ jobs:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: backend/package-lock.json
 
@@ -39,17 +39,15 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      # NOTE: package.json declares packageManager yarn@1.22.22 and CLAUDE.md
-      # says "yarn install", but the only committed lockfile is
-      # frontend/package-lock.json — there is no yarn.lock in the repo. CI
-      # installs from the lockfile that actually exists, so this uses npm.
-      # Resolve the inconsistency by either committing a yarn.lock and
-      # switching this back, or dropping the packageManager field.
-      - uses: actions/setup-node@v4
+      # The project standardises on npm: the only committed lockfile is
+      # frontend/package-lock.json. (package.json used to declare
+      # packageManager yarn@1.22 with no yarn.lock behind it; that field was
+      # removed so tooling and docs agree.)
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 

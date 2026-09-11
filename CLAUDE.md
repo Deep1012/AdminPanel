@@ -9,6 +9,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **Domain context:** The business manufactures paint cans. "Brands" are paint product lines (e.g., SYNCOAT, AUTOCOAT). "Sizes" are can sizes (e.g., 4LTR/5KG, 1LTR). Raw materials are metal sheets purchased by weight, gauge, and dimensions.
 
 ### Key Business Formulas
+> These describe the **intended** model. The live data violates the two availability formulas on most buckets (no production row links to a printing job; much dispatched stock predates the system), so the guards enforcing them run **warn-only** — see [ARCHITECTURE.md](ARCHITECTURE.md) and `backend/lib/availabilityPolicy.js` before changing that.
+
 - **No. of Sheets** = Weight / (Gauge x Size1 x Size2 / 100000 x 0.785)
 - **Printing Stock** = Bodies in Job x Sheets from Raw Material
 - **Available Printing Stock** = Printing Done - Used in Production
@@ -50,10 +52,16 @@ npm start            # Production
 ### Frontend
 ```bash
 cd frontend
-yarn install
-yarn start          # Dev server (uses craco)
-yarn build          # Production build
-yarn test           # Run tests
+npm ci              # the only committed lockfile is package-lock.json
+npm start           # Dev server (uses craco)
+npm run build       # Production build — use CI=true to treat warnings as errors
+npx craco test --watchAll=false   # Run tests
+npx eslint .        # Lint (flat config in eslint.config.js)
+```
+
+### Backend tests
+```bash
+cd backend && npm test   # jest; all Mongoose models are faked, no DB needed
 ```
 
 ### Seed Data
@@ -99,7 +107,7 @@ React 19 + CRA (via craco) + Tailwind CSS 3 + shadcn/ui (new-york style, JSX not
 - `src/pages/` - Route pages: Login, Dashboard, PurchaseOrders, Purchase, Printing, Production, Dispatch, Brands, Sizes, Customers, Admin, MenuManagement, RawMaterialStock, PrintingStock, FinishedGoods, ActivityLogs
 - `src/lib/iconMap.js` - Maps icon name strings to lucide-react components (used by dynamic menu)
 - `src/components/SearchableSelect.jsx` - Searchable dropdown for customer selection
-- `src/hooks/usePagination.js` - Client-side pagination hook (all tables)
+- `src/hooks/usePagination.js` - Client-side pagination hook (every table except Production, which paginates server-side via the opt-in envelope on `GET /api/production`)
 - `src/hooks/useTableFilter.js` - Client-side search/filter hook
 - `src/components/TablePagination.jsx` - Pagination UI component
 - `src/components/TableSearch.jsx` - Search bar component
@@ -128,7 +136,9 @@ Dark industrial theme ("Tactical Factory"). Safety orange primary (`#ea580c`), d
 
 **Serverless constraints (Vercel):** `server.js` exports the Express app instead of calling `app.listen`, and everything process-lifetime-dependent is gated behind `!process.env.VERCEL`. Mongoose connections are promise-cached on `globalThis` (`config/db.js`) so concurrent cold starts share one handshake; a per-request middleware awaits that connection before any route runs. In-process `node-cron` schedules never fire on Vercel — recurring work must go through a `vercel.json` cron entry hitting an endpoint guarded by `CRON_SECRET`. Responses are capped at 4.5MB, which is why backup size is limited to 4MB there.
 
-**No CI:** there is no `.github/workflows`. Both deploys are manual CLI invocations from a developer machine; `render.yaml` is an unattached blueprint for a standby backend.
+**CI:** `.github/workflows/ci.yml` runs backend jest, frontend tests and a `CI=true` build on push/PR to `main`. It does **not** deploy — both deploys stay manual CLI invocations. The old Render standby (`render.yaml`) was retired.
+
+**Data maintenance:** `GET /api/admin/reconcile` (admin-only, read-only) reports drift, orphans, dangling references and negative availability; it has a panel on the Admin page. One-off cleanup scripts live in `backend/scripts/` — each is idempotent, supports `--dry-run`, and is never run automatically.
 
 ## Further Reading
 - [ARCHITECTURE.md](ARCHITECTURE.md) — request lifecycle, serverless constraints, known gaps
