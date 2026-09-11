@@ -1,4 +1,4 @@
- {
+{
   "permissions": {
     "allow": [
       "Bash(npm install:*)",
@@ -44,7 +44,18 @@
       "Bash(node -e \":*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "mcp__vercel__list_teams",
+      "mcp__vercel__list_projects",
+      "Bash(npx vercel:*)",
+      "Bash(REACT_APP_BACKEND_URL=https://backend-six-kappa-96.vercel.app npx craco build)",
+      "Read(//c/Users/deepm/AppData/**)",
+      "Read(//c/Users/deepm/.local/**)",
+      "Read(//c/Users/deepm/**)",
+      "mcp__vercel__get_runtime_logs",
+      "Bash(REACT_APP_BACKEND_URL=https://timestin-backend.vercel.app npx craco build)",
+      "mcp__render__list_services",
+      "mcp__render__get_metrics"
     ]
   }
 }
