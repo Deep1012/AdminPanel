@@ -151,9 +151,9 @@ const Purchase = () => {
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <p className="text-muted-foreground">Manage raw material (metal sheets) purchases</p>
                 <div className="flex gap-2">
-                    <Button variant="outline" onClick={() => {
+                    <Button variant="outline" onClick={async () => {
                         const data = filteredPurchases;
-                        if (exportToExcel({ data, columns: PURCHASE_EXPORT_COLUMNS, fileName: 'Purchases', sheetName: 'Purchases' })) toast.success('Exported to Excel');
+                        if (await exportToExcel({ data, columns: PURCHASE_EXPORT_COLUMNS, fileName: 'Purchases', sheetName: 'Purchases' })) toast.success('Exported to Excel');
                         else toast.error('No data to export');
                     }} className="font-bold uppercase tracking-wider rounded-sm" data-testid="export-purchase-btn">
                         <Download className="w-4 h-4 mr-2" /> Export

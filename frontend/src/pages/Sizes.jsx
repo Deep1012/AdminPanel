@@ -87,9 +87,9 @@ const Sizes = () => {
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <p className="text-muted-foreground">Manage container sizes for production</p>
                 <div className="flex gap-2">
-                    <Button variant="outline" onClick={() => {
+                    <Button variant="outline" onClick={async () => {
                         const data = filteredSizes;
-                        if (exportToExcel({ data, columns: SIZES_EXPORT_COLUMNS, fileName: 'Sizes', sheetName: 'Sizes' })) toast.success('Exported to Excel');
+                        if (await exportToExcel({ data, columns: SIZES_EXPORT_COLUMNS, fileName: 'Sizes', sheetName: 'Sizes' })) toast.success('Exported to Excel');
                         else toast.error('No data to export');
                     }} className="font-bold uppercase tracking-wider rounded-sm" data-testid="export-sizes-btn">
                         <Download className="w-4 h-4 mr-2" /> Export

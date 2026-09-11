@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { authAPI } from '../lib/api';
+import { invalidateAll } from '../lib/apiCache';
 
 const AuthContext = createContext(null);
 
@@ -55,6 +56,11 @@ export const AuthProvider = ({ children }) => {
     const logout = () => {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
+        // Reference data is cached per page load, and admin-only rows (the
+        // admin_only menu items) are part of it. Without this, logging out and
+        // signing in as a non-admin inside the same page load would serve the
+        // previous user's cached menu for up to the TTL.
+        invalidateAll();
         setUser(null);
     };
 

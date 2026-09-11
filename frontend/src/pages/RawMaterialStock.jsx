@@ -81,10 +81,10 @@ const RawMaterialStock = () => {
         finally { setLoading(false); }
     };
 
-    const handleExport = () => {
+    const handleExport = async () => {
         const columns = viewMode === 'aggregated' ? AGGREGATED_EXPORT_COLUMNS : INDIVIDUAL_EXPORT_COLUMNS;
         const fileName = viewMode === 'aggregated' ? 'Raw_Material_Stock_Aggregated' : 'Raw_Material_Stock_Individual';
-        if (exportToExcel({ data: filteredData, columns, fileName, sheetName: 'Raw Material Stock' })) toast.success('Exported to Excel');
+        if (await exportToExcel({ data: filteredData, columns, fileName, sheetName: 'Raw Material Stock' })) toast.success('Exported to Excel');
         else toast.error('No data to export');
     };
 

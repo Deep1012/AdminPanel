@@ -250,8 +250,8 @@ const Printing = () => {
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <p className="text-muted-foreground">Manage printing and coating jobs linked to raw materials</p>
                 <div className="flex gap-2">
-                    <Button variant="outline" onClick={() => {
-                        if (exportToExcel({ data: filteredJobs, columns: PRINTING_EXPORT_COLUMNS, fileName: 'Printing_Jobs', sheetName: 'Printing Jobs' })) toast.success('Exported to Excel');
+                    <Button variant="outline" onClick={async () => {
+                        if (await exportToExcel({ data: filteredJobs, columns: PRINTING_EXPORT_COLUMNS, fileName: 'Printing_Jobs', sheetName: 'Printing Jobs' })) toast.success('Exported to Excel');
                         else toast.error('No data to export');
                     }} className="font-bold uppercase tracking-wider rounded-sm" data-testid="export-jobs-btn">
                         <Download className="w-4 h-4 mr-2" /> Export

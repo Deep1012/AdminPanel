@@ -129,9 +129,9 @@ const Admin = () => {
                     <Button variant="destructive" onClick={() => setClearDataOpen(true)} className="font-bold uppercase tracking-wider rounded-sm" data-testid="clear-data-btn">
                         <DatabaseZap className="w-4 h-4 mr-2" /> Clear Data
                     </Button>
-                    <Button variant="outline" onClick={() => {
+                    <Button variant="outline" onClick={async () => {
                         const data = filteredUsers;
-                        if (exportToExcel({ data, columns: USERS_EXPORT_COLUMNS, fileName: 'Users', sheetName: 'Users' })) toast.success('Exported to Excel');
+                        if (await exportToExcel({ data, columns: USERS_EXPORT_COLUMNS, fileName: 'Users', sheetName: 'Users' })) toast.success('Exported to Excel');
                         else toast.error('No data to export');
                     }} className="font-bold uppercase tracking-wider rounded-sm" data-testid="export-users-btn">
                         <Download className="w-4 h-4 mr-2" /> Export

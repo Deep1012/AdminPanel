@@ -87,9 +87,9 @@ const Customers = () => {
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <p className="text-muted-foreground">Manage customers for dispatch and purchase orders</p>
                 <div className="flex gap-2">
-                    <Button variant="outline" onClick={() => {
+                    <Button variant="outline" onClick={async () => {
                         const data = filteredCustomers.length > 0 ? filteredCustomers : customers;
-                        if (exportToExcel({ data, columns: CUSTOMERS_EXPORT_COLUMNS, fileName: 'Customers', sheetName: 'Customers' })) toast.success('Exported to Excel');
+                        if (await exportToExcel({ data, columns: CUSTOMERS_EXPORT_COLUMNS, fileName: 'Customers', sheetName: 'Customers' })) toast.success('Exported to Excel');
                         else toast.error('No data to export');
                     }} className="font-bold uppercase tracking-wider rounded-sm" data-testid="export-customers-btn">
                         <Download className="w-4 h-4 mr-2" /> Export

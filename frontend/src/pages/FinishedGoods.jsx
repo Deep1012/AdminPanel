@@ -58,8 +58,8 @@ const FinishedGoods = () => {
         <div className="space-y-6 animate-fade-in" data-testid="finished-goods-page">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <p className="text-muted-foreground">Finished goods stock levels grouped by size and brand</p>
-                <Button variant="outline" onClick={() => {
-                    if (exportToExcel({ data: stockData, columns: EXPORT_COLUMNS, fileName: 'Finished_Goods', sheetName: 'Finished Goods' })) toast.success('Exported to Excel');
+                <Button variant="outline" onClick={async () => {
+                    if (await exportToExcel({ data: stockData, columns: EXPORT_COLUMNS, fileName: 'Finished_Goods', sheetName: 'Finished Goods' })) toast.success('Exported to Excel');
                     else toast.error('No data to export');
                 }} className="font-bold uppercase tracking-wider rounded-sm" data-testid="export-finished-goods-btn">
                     <Download className="w-4 h-4 mr-2" /> Excel

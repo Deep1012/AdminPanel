@@ -1,4 +1,11 @@
-import * as XLSX from 'xlsx';
+/**
+ * `xlsx` is loaded on demand — see the note in exportToExcel.js. This module is
+ * pulled in by `ImportExcelButton`, which sits on eight pages, so a static
+ * import would put the spreadsheet engine back in the entry chunk even though
+ * nothing is parsed until a file is chosen.
+ *
+ * `downloadTemplate` is async for the same reason.
+ */
 
 /**
  * Parse an Excel file and return rows as objects keyed by column headers.
@@ -7,6 +14,8 @@ import * as XLSX from 'xlsx';
  * @returns {Promise<Array<Object>>} Parsed row objects
  */
 export async function importFromExcel(file, columns) {
+    const XLSX = await import('xlsx');
+
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = (e) => {
@@ -46,8 +55,11 @@ export async function importFromExcel(file, columns) {
  * Download a template Excel with only headers.
  * @param {Array<{header: string}>} columns - Column definitions
  * @param {string} fileName - File name without extension
+ * @returns {Promise<void>}
  */
-export function downloadTemplate(columns, fileName) {
+export async function downloadTemplate(columns, fileName) {
+    const XLSX = await import('xlsx');
+
     const headers = columns.map(col => col.header);
     const worksheet = XLSX.utils.aoa_to_sheet([headers]);
     worksheet['!cols'] = headers.map(h => ({ wch: Math.max(h.length + 4, 15) }));

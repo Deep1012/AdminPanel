@@ -197,8 +197,8 @@ const Dispatch = () => {
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <p className="text-muted-foreground">Manage dispatch orders and shipments</p>
                 <div className="flex gap-2">
-                    <Button variant="outline" onClick={() => {
-                        if (exportToExcel({ data: filteredDispatches, columns: DISPATCH_EXPORT_COLUMNS, fileName: 'Dispatches', sheetName: 'Dispatches' })) toast.success('Exported to Excel');
+                    <Button variant="outline" onClick={async () => {
+                        if (await exportToExcel({ data: filteredDispatches, columns: DISPATCH_EXPORT_COLUMNS, fileName: 'Dispatches', sheetName: 'Dispatches' })) toast.success('Exported to Excel');
                         else toast.error('No data to export');
                     }} className="font-bold uppercase tracking-wider rounded-sm" data-testid="export-dispatch-btn">
                         <Download className="w-4 h-4 mr-2" /> Export

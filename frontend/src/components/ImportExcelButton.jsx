@@ -58,6 +58,16 @@ const ImportExcelButton = ({ columns, templateName, onImport }) => {
         }
     };
 
+    // `downloadTemplate` is async now that xlsx is code-split, so a bare
+    // onClick would leave the rejection unhandled if the chunk failed to load.
+    const handleTemplateDownload = async () => {
+        try {
+            await downloadTemplate(columns, templateName);
+        } catch (err) {
+            toast.error(getErrorMessage(err, 'Failed to build the template file'));
+        }
+    };
+
     const dismiss = () => {
         setImporting(false);
         setResult(null);
@@ -74,7 +84,7 @@ const ImportExcelButton = ({ columns, templateName, onImport }) => {
                 <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => downloadTemplate(columns, templateName)}
+                    onClick={handleTemplateDownload}
                     className="font-bold uppercase tracking-wider rounded-sm text-xs"
                     data-testid="download-template-btn"
                 >

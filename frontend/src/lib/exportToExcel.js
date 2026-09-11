@@ -1,4 +1,17 @@
-import * as XLSX from 'xlsx';
+/**
+ * `xlsx` and `file-saver` are loaded on demand, not at module scope.
+ *
+ * WHY: xlsx is by far the largest single dependency in the bundle, and this
+ * module is imported statically by twelve pages *and* by `Layout`, which every
+ * authenticated route renders. A static `import * as XLSX` therefore pinned the
+ * whole spreadsheet engine into the entry chunk, so the Login screen — where
+ * nobody can export anything — paid for it. Moving the import inside the
+ * function body lets webpack emit it as a separate chunk that is fetched the
+ * first time someone actually clicks Export.
+ *
+ * CONSEQUENCE, DELIBERATE: `exportToExcel` is now async. Every call site
+ * awaits it; the boolean it resolves to has the same meaning as before.
+ */
 import { saveAs } from 'file-saver';
 
 /**
@@ -8,12 +21,15 @@ import { saveAs } from 'file-saver';
  * @param {Array<{header: string, key: string, transform?: Function}>} options.columns - Column definitions
  * @param {string} options.fileName - File name without extension
  * @param {string} [options.sheetName='Sheet1'] - Worksheet name
- * @returns {boolean} true if export succeeded, false if no data
+ * @returns {Promise<boolean>} true if export succeeded, false if no data
  */
-export function exportToExcel({ data, columns, fileName, sheetName = 'Sheet1' }) {
+export async function exportToExcel({ data, columns, fileName, sheetName = 'Sheet1' }) {
+    // Checked before the dynamic import so an empty export costs no download.
     if (!data || data.length === 0) {
         return false;
     }
+
+    const XLSX = await import('xlsx');
 
     const headers = columns.map(col => col.header);
     const rows = data.map((row, rowIndex) =>

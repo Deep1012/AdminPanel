@@ -127,9 +127,14 @@ export const Layout = ({ children }) => {
                 },
             ];
 
+            // Sequential on purpose: each call triggers a browser download, and
+            // `exportToExcel` is now async (xlsx is code-split), so awaiting in
+            // order keeps the six files landing one after another instead of
+            // six simultaneous save prompts. The xlsx chunk is fetched once and
+            // reused for the rest of the loop.
             let count = 0;
             for (const exp of exports) {
-                if (exportToExcel(exp)) count++;
+                if (await exportToExcel(exp)) count++;
             }
             toast.success(`Exported ${count} file(s) successfully`);
         } catch (err) {
