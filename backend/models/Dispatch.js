@@ -9,11 +9,11 @@ const dispatchSchema = new mongoose.Schema({
   brand_name: { type: String, default: "" },
   size_id: { type: String, default: "" },
   size_name: { type: String, default: "" },
-  quantity: { type: Number, default: 0 },
+  quantity: { type: Number, default: 0, min: 0 },
   purchase_order_id: { type: String, default: null },
   // Multi-item support
   items: { type: Array, default: [] },
-  total_quantity: { type: Number, default: 0 },
+  total_quantity: { type: Number, default: 0, min: 0 },
   notes: { type: String, default: null },
   dispatch_date: { type: String, required: true },
   created_by: { type: String, required: true },

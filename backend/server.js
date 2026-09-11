@@ -1,4 +1,18 @@
 require("dotenv").config();
+
+// Fail fast on missing configuration. A silently-absent JWT_SECRET makes
+// jwt.sign throw at request time; an absent MONGO_URL fails every query; an
+// absent CRON_SECRET makes the backup cron endpoint refuse to run. Better to
+// refuse to boot than to serve a half-configured API.
+const REQUIRED_ENV_VARS = ["MONGO_URL", "JWT_SECRET", "CRON_SECRET"];
+const missingEnvVars = REQUIRED_ENV_VARS.filter((name) => !process.env[name]);
+if (missingEnvVars.length > 0) {
+  throw new Error(
+    `Missing required environment variable(s): ${missingEnvVars.join(", ")}. ` +
+    "Set them in the environment (or backend/.env for local development) before starting the server."
+  );
+}
+
 const express = require("express");
 const cors = require("cors");
 const connectDB = require("./config/db");

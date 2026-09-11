@@ -4,34 +4,49 @@ const Purchase = require("../models/Purchase");
 const PrintingJob = require("../models/PrintingJob");
 const { authenticate } = require("../middleware/auth");
 const { logActivity } = require("../lib/activityLogger");
+const { nextSequence } = require("../lib/sequence");
+const { sheetsFromWeight } = require("../lib/stock");
 
 const router = express.Router();
 
-// Generate sequential SR No: RM-001, RM-002, etc.
-async function generateSrNo() {
-  const last = await Purchase.findOne({}, { sr_no: 1 })
-    .sort({ sr_no: -1 })
-    .lean();
+// SR No shape: RM-001, RM-002, ... RM-1000 (see lib/sequence.js).
+const SR_NO_PREFIX = "RM-";
+const SR_NO_WIDTH = 3;
 
-  let seq = 1;
-  if (last && last.sr_no) {
-    const match = last.sr_no.match(/RM-(\d+)/);
-    if (match) seq = parseInt(match[1], 10) + 1;
+// Fields feeding the No. of Sheets formula; all must be finite and > 0.
+const SHEET_FORMULA_FIELDS = ["gauge", "size1", "size2", "weight"];
+
+/**
+ * First offending sheet-formula field, or null when all four are valid.
+ * A zero or non-numeric gauge used to silently yield no_of_sheets = 0, which
+ * masked data-entry mistakes instead of reporting them.
+ */
+function findInvalidSheetInput(values) {
+  for (const field of SHEET_FORMULA_FIELDS) {
+    const value = values[field];
+    const n = typeof value === "number" ? value : Number(value);
+    if (!Number.isFinite(n) || n <= 0) {
+      return field;
+    }
   }
-
-  return `RM-${String(seq).padStart(3, "0")}`;
+  return null;
 }
 
 router.post("/", authenticate, async (req, res) => {
   try {
     const { gauge, size1, size2, temper, weight, supplier, invoice_number, purchase_date } = req.body;
+
+    const invalidField = findInvalidSheetInput({ gauge, size1, size2, weight });
+    if (invalidField) {
+      return res.status(400).json({ detail: `${invalidField} must be a number greater than 0` });
+    }
+
     const id = uuidv4();
     const now = purchase_date || new Date().toISOString();
-    const sr_no = await generateSrNo();
+    const sr_no = await nextSequence(Purchase, "sr_no", SR_NO_PREFIX, SR_NO_WIDTH);
 
-    // Calculate No of Sheets: WEIGHT / (GAUGE * SIZE1 * SIZE2 / 100000 * 0.785)
-    const divisor = (gauge * size1 * size2 / 100000) * 0.785;
-    const no_of_sheets = divisor > 0 ? Math.floor(weight / divisor) : 0;
+    // No. of Sheets = WEIGHT / (GAUGE * SIZE1 * SIZE2 / 100000 * 0.785)
+    const no_of_sheets = sheetsFromWeight({ weight, gauge, size1, size2 });
 
     const purchase = await Purchase.create({
       id,
@@ -50,7 +65,7 @@ router.post("/", authenticate, async (req, res) => {
       created_by: req.user.username,
     });
 
-    logActivity({ action: "CREATE", entity_type: "purchase", entity_id: id, entity_label: sr_no, user: req.user, details: `Added raw material ${sr_no} (${weight}kg)`, ip_address: req.ip });
+    await logActivity({ action: "CREATE", entity_type: "purchase", entity_id: id, entity_label: sr_no, user: req.user, details: `Added raw material ${sr_no} (${weight}kg)`, ip_address: req.ip });
 
     res.json(purchase.toObject({ versionKey: false }));
   } catch (error) {
@@ -130,13 +145,18 @@ router.put("/:purchaseId", authenticate, async (req, res) => {
       const s2 = size2 !== undefined ? size2 : existing.size2;
       const w = weight !== undefined ? weight : existing.weight;
 
+      // Validate the *effective* values, since all four feed the formula.
+      const invalidField = findInvalidSheetInput({ gauge: g, size1: s1, size2: s2, weight: w });
+      if (invalidField) {
+        return res.status(400).json({ detail: `${invalidField} must be a number greater than 0` });
+      }
+
       if (gauge !== undefined) updateData.gauge = g;
       if (size1 !== undefined) updateData.size1 = s1;
       if (size2 !== undefined) updateData.size2 = s2;
       if (weight !== undefined) updateData.weight = w;
 
-      const divisor = (g * s1 * s2 / 100000) * 0.785;
-      const no_of_sheets = divisor > 0 ? Math.floor(w / divisor) : 0;
+      const no_of_sheets = sheetsFromWeight({ weight: w, gauge: g, size1: s1, size2: s2 });
       updateData.no_of_sheets = no_of_sheets;
       updateData.sheets_available = no_of_sheets - (existing.sheets_used || 0);
     }
@@ -144,7 +164,7 @@ router.put("/:purchaseId", authenticate, async (req, res) => {
     const result = await Purchase.updateOne({ id: req.params.purchaseId }, { $set: updateData });
     if (result.matchedCount === 0) return res.status(404).json({ detail: "Purchase not found" });
 
-    logActivity({ action: "UPDATE", entity_type: "purchase", entity_id: req.params.purchaseId, user: req.user, details: `Updated raw material entry`, ip_address: req.ip });
+    await logActivity({ action: "UPDATE", entity_type: "purchase", entity_id: req.params.purchaseId, user: req.user, details: `Updated raw material entry`, ip_address: req.ip });
 
     res.json({ message: "Purchase updated successfully" });
   } catch (error) {
@@ -166,7 +186,7 @@ router.delete("/:purchaseId", authenticate, async (req, res) => {
       return res.status(404).json({ detail: "Purchase not found" });
     }
 
-    logActivity({ action: "DELETE", entity_type: "purchase", entity_id: req.params.purchaseId, entity_label: existing?.sr_no, user: req.user, details: `Deleted raw material ${existing?.sr_no || ""}`, ip_address: req.ip });
+    await logActivity({ action: "DELETE", entity_type: "purchase", entity_id: req.params.purchaseId, entity_label: existing?.sr_no, user: req.user, details: `Deleted raw material ${existing?.sr_no || ""}`, ip_address: req.ip });
 
     res.json({ message: "Purchase deleted successfully" });
   } catch (error) {

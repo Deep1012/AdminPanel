@@ -57,6 +57,13 @@ router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
 
+    // Reject non-strings before building any query: a body such as
+    // {"email":{"$ne":null}} would otherwise reach findOne as a Mongo operator
+    // filter and match an arbitrary user.
+    if (typeof email !== "string" || typeof password !== "string") {
+      return res.status(400).json({ detail: "email and password must be strings" });
+    }
+
     const user = await User.findOne({ email });
     if (!user || !(await bcrypt.compare(password, user.password))) {
       return res.status(401).json({ detail: "Invalid credentials" });
@@ -72,7 +79,7 @@ router.post("/login", async (req, res) => {
       { expiresIn: "24h" }
     );
 
-    logActivity({ action: "LOGIN", entity_type: "auth", entity_id: user.id, entity_label: user.username, user: { id: user.id, username: user.username }, details: `User "${user.username}" logged in`, ip_address: req.ip });
+    await logActivity({ action: "LOGIN", entity_type: "auth", entity_id: user.id, entity_label: user.username, user: { id: user.id, username: user.username }, details: `User "${user.username}" logged in`, ip_address: req.ip });
 
     res.json({
       token,

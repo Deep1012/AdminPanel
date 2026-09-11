@@ -13,7 +13,7 @@ router.post("/", authenticate, adminRequired, async (req, res) => {
 
     const size = await Size.create({ id, name: req.body.name, created_at: now });
 
-    logActivity({ action: "CREATE", entity_type: "size", entity_id: id, entity_label: req.body.name, user: req.user, details: `Created size "${req.body.name}"`, ip_address: req.ip });
+    await logActivity({ action: "CREATE", entity_type: "size", entity_id: id, entity_label: req.body.name, user: req.user, details: `Created size "${req.body.name}"`, ip_address: req.ip });
 
     res.json({ id: size.id, name: size.name, created_at: size.created_at });
   } catch (error) {
@@ -37,7 +37,7 @@ router.put("/:sizeId", authenticate, adminRequired, async (req, res) => {
     const result = await Size.updateOne({ id: req.params.sizeId }, { $set: { name } });
     if (result.matchedCount === 0) return res.status(404).json({ detail: "Size not found" });
 
-    logActivity({ action: "UPDATE", entity_type: "size", entity_id: req.params.sizeId, entity_label: name, user: req.user, details: `Updated size to "${name}"`, ip_address: req.ip });
+    await logActivity({ action: "UPDATE", entity_type: "size", entity_id: req.params.sizeId, entity_label: name, user: req.user, details: `Updated size to "${name}"`, ip_address: req.ip });
 
     res.json({ message: "Size updated successfully" });
   } catch (error) {
@@ -53,7 +53,7 @@ router.delete("/:sizeId", authenticate, adminRequired, async (req, res) => {
       return res.status(404).json({ detail: "Size not found" });
     }
 
-    logActivity({ action: "DELETE", entity_type: "size", entity_id: req.params.sizeId, entity_label: existing?.name, user: req.user, details: `Deleted size "${existing?.name || ""}"`, ip_address: req.ip });
+    await logActivity({ action: "DELETE", entity_type: "size", entity_id: req.params.sizeId, entity_label: existing?.name, user: req.user, details: `Deleted size "${existing?.name || ""}"`, ip_address: req.ip });
 
     res.json({ message: "Size deleted successfully" });
   } catch (error) {

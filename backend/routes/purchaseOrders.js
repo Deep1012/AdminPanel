@@ -4,28 +4,23 @@ const PurchaseOrder = require("../models/PurchaseOrder");
 const Dispatch = require("../models/Dispatch");
 const { authenticate } = require("../middleware/auth");
 const { logActivity } = require("../lib/activityLogger");
+const { nextSequence } = require("../lib/sequence");
 
 const router = express.Router();
 
-// Generate serial number: PO-YYYYMMDD-NNN
+const SERIAL_NO_WIDTH = 3;
+
+/**
+ * Serial number shape: PO-YYYYMMDD-NNN, numbered per day.
+ * The day is part of the prefix, so nextSequence scopes the maximum to that
+ * day for free (see lib/sequence.js).
+ */
 async function generateSerialNo(dateStr) {
   const d = new Date(dateStr);
   const dateKey = d.toISOString().split("T")[0].replace(/-/g, "");
   const prefix = `PO-${dateKey}-`;
 
-  const escapedPrefix = prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const lastPO = await PurchaseOrder.findOne(
-    { serial_no: { $regex: `^${escapedPrefix}` } },
-    { serial_no: 1 }
-  ).sort({ serial_no: -1 }).lean();
-
-  let seq = 1;
-  if (lastPO) {
-    const lastSeq = parseInt(lastPO.serial_no.split("-").pop(), 10);
-    if (!isNaN(lastSeq)) seq = lastSeq + 1;
-  }
-
-  return `${prefix}${String(seq).padStart(3, "0")}`;
+  return nextSequence(PurchaseOrder, "serial_no", prefix, SERIAL_NO_WIDTH);
 }
 
 // GET all purchase orders
@@ -69,7 +64,7 @@ router.post("/", authenticate, async (req, res) => {
       created_at: now,
     });
 
-    logActivity({ action: "CREATE", entity_type: "purchase_order", entity_id: id, entity_label: serial_no, user: req.user, details: `Created PO ${serial_no} for ${company_name} (${brand_name} ${size_name} x${quantity})`, ip_address: req.ip });
+    await logActivity({ action: "CREATE", entity_type: "purchase_order", entity_id: id, entity_label: serial_no, user: req.user, details: `Created PO ${serial_no} for ${company_name} (${brand_name} ${size_name} x${quantity})`, ip_address: req.ip });
 
     res.json(order.toObject({ versionKey: false }));
   } catch (error) {
@@ -115,7 +110,7 @@ router.put("/:poId", authenticate, async (req, res) => {
 
     await PurchaseOrder.updateOne({ id: req.params.poId }, { $set: updateData }, { runValidators: true });
 
-    logActivity({ action: "UPDATE", entity_type: "purchase_order", entity_id: req.params.poId, entity_label: existingPO.serial_no, user: req.user, details: `Updated PO ${existingPO.serial_no}`, ip_address: req.ip });
+    await logActivity({ action: "UPDATE", entity_type: "purchase_order", entity_id: req.params.poId, entity_label: existingPO.serial_no, user: req.user, details: `Updated PO ${existingPO.serial_no}`, ip_address: req.ip });
 
     const updatedPO = await PurchaseOrder.findOne({ id: req.params.poId }, { _id: 0, __v: 0 }).lean();
     res.json(updatedPO);
@@ -141,7 +136,7 @@ router.put("/:poId/complete", authenticate, async (req, res) => {
 
     await PurchaseOrder.updateOne({ id: req.params.poId }, { $set: updateData });
 
-    logActivity({ action: "UPDATE", entity_type: "purchase_order", entity_id: req.params.poId, entity_label: po.serial_no, user: req.user, details: `${newStatus ? 'Completed' : 'Reopened'} PO ${po.serial_no}`, ip_address: req.ip });
+    await logActivity({ action: "UPDATE", entity_type: "purchase_order", entity_id: req.params.poId, entity_label: po.serial_no, user: req.user, details: `${newStatus ? 'Completed' : 'Reopened'} PO ${po.serial_no}`, ip_address: req.ip });
 
     const updated = await PurchaseOrder.findOne({ id: req.params.poId }, { _id: 0, __v: 0 }).lean();
     res.json(updated);
@@ -164,7 +159,7 @@ router.delete("/:poId", authenticate, async (req, res) => {
 
     await PurchaseOrder.deleteOne({ id: req.params.poId });
 
-    logActivity({ action: "DELETE", entity_type: "purchase_order", entity_id: req.params.poId, entity_label: po.serial_no, user: req.user, details: `Deleted PO ${po.serial_no}`, ip_address: req.ip });
+    await logActivity({ action: "DELETE", entity_type: "purchase_order", entity_id: req.params.poId, entity_label: po.serial_no, user: req.user, details: `Deleted PO ${po.serial_no}`, ip_address: req.ip });
 
     res.json({ message: "Purchase order deleted successfully" });
   } catch (error) {

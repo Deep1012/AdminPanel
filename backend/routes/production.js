@@ -86,7 +86,7 @@ router.post("/", authenticate, async (req, res) => {
       }
     }
 
-    logActivity({ action: "CREATE", entity_type: "production", entity_id: id, entity_label: `${brand_name} ${size_name}`, user: req.user, details: `Produced ${quantity_produced} units of ${brand_name} ${size_name}`, ip_address: req.ip });
+    await logActivity({ action: "CREATE", entity_type: "production", entity_id: id, entity_label: `${brand_name} ${size_name}`, user: req.user, details: `Produced ${quantity_produced} units of ${brand_name} ${size_name}`, ip_address: req.ip });
 
     res.json(entry.toObject({ versionKey: false }));
   } catch (error) {
@@ -139,7 +139,7 @@ router.put("/:prodId", authenticate, async (req, res) => {
       await Production.updateMany({ parent_production_id: req.params.prodId }, { $set: cascadeUpdate });
     }
 
-    logActivity({ action: "UPDATE", entity_type: "production", entity_id: req.params.prodId, user: req.user, details: `Updated production entry`, ip_address: req.ip });
+    await logActivity({ action: "UPDATE", entity_type: "production", entity_id: req.params.prodId, user: req.user, details: `Updated production entry`, ip_address: req.ip });
 
     res.json({ message: "Production entry updated successfully" });
   } catch (error) {
@@ -157,7 +157,7 @@ router.delete("/:prodId", authenticate, async (req, res) => {
       $or: [{ id: req.params.prodId }, { parent_production_id: req.params.prodId }]
     });
 
-    logActivity({ action: "DELETE", entity_type: "production", entity_id: req.params.prodId, entity_label: `${entry.brand_name} ${entry.size_name}`, user: req.user, details: `Deleted ${deleteResult.deletedCount} production entry(s) for ${entry.brand_name} ${entry.size_name}`, ip_address: req.ip });
+    await logActivity({ action: "DELETE", entity_type: "production", entity_id: req.params.prodId, entity_label: `${entry.brand_name} ${entry.size_name}`, user: req.user, details: `Deleted ${deleteResult.deletedCount} production entry(s) for ${entry.brand_name} ${entry.size_name}`, ip_address: req.ip });
 
     res.json({ message: `Deleted ${deleteResult.deletedCount} production entry(s)` });
   } catch (error) {

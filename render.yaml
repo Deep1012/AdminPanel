@@ -13,7 +13,9 @@ services:
         sync: false
       - key: JWT_SECRET
         sync: false
+      - key: CRON_SECRET
+        sync: false
       - key: CORS_ORIGINS
-        value: "*"
+        value: https://timestin-crm.netlify.app
       - key: NODE_ENV
         value: production

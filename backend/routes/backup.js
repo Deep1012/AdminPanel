@@ -70,7 +70,7 @@ async function createBackup(triggerUser) {
   }
 
   if (triggerUser) {
-    logActivity({ action: "BACKUP", entity_type: "backup", entity_id: backup.id, user: triggerUser, details: `Manual backup created (${(size_bytes / 1024).toFixed(1)} KB)` });
+    await logActivity({ action: "BACKUP", entity_type: "backup", entity_id: backup.id, user: triggerUser, details: `Manual backup created (${(size_bytes / 1024).toFixed(1)} KB)` });
   }
 
   return backup;

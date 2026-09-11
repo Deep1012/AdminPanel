@@ -4,21 +4,13 @@ const Dispatch = require("../models/Dispatch");
 const PurchaseOrder = require("../models/PurchaseOrder");
 const { authenticate } = require("../middleware/auth");
 const { logActivity } = require("../lib/activityLogger");
+const { nextSequence } = require("../lib/sequence");
 
 const router = express.Router();
 
-// Auto-generate order number: DSP-001, DSP-002, etc.
-async function generateOrderNumber() {
-  const last = await Dispatch.findOne({}, { order_number: 1 })
-    .sort({ order_number: -1 })
-    .lean();
-  let seq = 1;
-  if (last && last.order_number) {
-    const match = last.order_number.match(/DSP-(\d+)/);
-    if (match) seq = parseInt(match[1], 10) + 1;
-  }
-  return `DSP-${String(seq).padStart(3, "0")}`;
-}
+// Order number shape: DSP-001, DSP-002, ... DSP-1000 (see lib/sequence.js).
+const ORDER_NUMBER_PREFIX = "DSP-";
+const ORDER_NUMBER_WIDTH = 3;
 
 // Normalize old single-item dispatches to have an items array
 function normalizeDispatch(doc) {
@@ -86,7 +78,7 @@ router.post("/", authenticate, async (req, res) => {
     // Phase 2: All validations passed — create dispatch and sync POs
     const id = uuidv4();
     const now = dispatch_date || new Date().toISOString();
-    const order_number = await generateOrderNumber();
+    const order_number = await nextSequence(Dispatch, "order_number", ORDER_NUMBER_PREFIX, ORDER_NUMBER_WIDTH);
     const total_quantity = resolvedItems.reduce((sum, i) => sum + (i.quantity || 0), 0);
 
     const entry = await Dispatch.create({
@@ -117,7 +109,7 @@ router.post("/", authenticate, async (req, res) => {
       }
     }
 
-    logActivity({ action: "CREATE", entity_type: "dispatch", entity_id: id, entity_label: order_number, user: req.user, details: `Dispatched ${total_quantity} units to ${customer_name}`, ip_address: req.ip });
+    await logActivity({ action: "CREATE", entity_type: "dispatch", entity_id: id, entity_label: order_number, user: req.user, details: `Dispatched ${total_quantity} units to ${customer_name}`, ip_address: req.ip });
 
     res.json(normalizeDispatch(entry));
   } catch (error) {
@@ -227,7 +219,7 @@ router.put("/:dispatchId", authenticate, async (req, res) => {
       }
     }
 
-    logActivity({ action: "UPDATE", entity_type: "dispatch", entity_id: req.params.dispatchId, entity_label: oldDispatch.order_number, user: req.user, details: `Updated dispatch ${oldDispatch.order_number}`, ip_address: req.ip });
+    await logActivity({ action: "UPDATE", entity_type: "dispatch", entity_id: req.params.dispatchId, entity_label: oldDispatch.order_number, user: req.user, details: `Updated dispatch ${oldDispatch.order_number}`, ip_address: req.ip });
 
     const updated = await Dispatch.findOne({ id: req.params.dispatchId }, { _id: 0, __v: 0 }).lean();
     res.json(normalizeDispatch(updated));
@@ -254,7 +246,7 @@ router.delete("/:dispatchId", authenticate, async (req, res) => {
 
     await Dispatch.deleteOne({ id: req.params.dispatchId });
 
-    logActivity({ action: "DELETE", entity_type: "dispatch", entity_id: req.params.dispatchId, entity_label: dispatch.order_number, user: req.user, details: `Deleted dispatch ${dispatch.order_number}`, ip_address: req.ip });
+    await logActivity({ action: "DELETE", entity_type: "dispatch", entity_id: req.params.dispatchId, entity_label: dispatch.order_number, user: req.user, details: `Deleted dispatch ${dispatch.order_number}`, ip_address: req.ip });
 
     res.json({ message: "Dispatch deleted successfully" });
   } catch (error) {

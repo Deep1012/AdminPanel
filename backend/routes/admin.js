@@ -21,7 +21,7 @@ router.post("/clear-operational-data", authenticate, adminRequired, async (req, 
       PurchaseOrder.deleteMany({}),
     ]);
 
-    logActivity({ action: "CLEAR_DATA", entity_type: "admin", user: req.user, details: `Cleared all operational data: ${purchases.deletedCount} purchases, ${printingJobs.deletedCount} jobs, ${production.deletedCount} production, ${dispatches.deletedCount} dispatches, ${purchaseOrders.deletedCount} POs`, ip_address: req.ip });
+    await logActivity({ action: "CLEAR_DATA", entity_type: "admin", user: req.user, details: `Cleared all operational data: ${purchases.deletedCount} purchases, ${printingJobs.deletedCount} jobs, ${production.deletedCount} production, ${dispatches.deletedCount} dispatches, ${purchaseOrders.deletedCount} POs`, ip_address: req.ip });
 
     res.json({
       message: "Operational data cleared successfully",

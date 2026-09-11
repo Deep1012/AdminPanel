@@ -4,21 +4,13 @@ const PrintingJob = require("../models/PrintingJob");
 const Purchase = require("../models/Purchase");
 const { authenticate } = require("../middleware/auth");
 const { logActivity } = require("../lib/activityLogger");
+const { nextSequence } = require("../lib/sequence");
 
 const router = express.Router();
 
-// Auto-generate job number: JOB-001, JOB-002, etc.
-async function generateJobNumber() {
-  const last = await PrintingJob.findOne({}, { job_number: 1 })
-    .sort({ job_number: -1 })
-    .lean();
-  let seq = 1;
-  if (last && last.job_number) {
-    const match = last.job_number.match(/JOB-(\d+)/);
-    if (match) seq = parseInt(match[1], 10) + 1;
-  }
-  return `JOB-${String(seq).padStart(3, "0")}`;
-}
+// Job number shape: JOB-001, JOB-002, ... JOB-1000 (see lib/sequence.js).
+const JOB_NUMBER_PREFIX = "JOB-";
+const JOB_NUMBER_WIDTH = 3;
 
 router.post("/", authenticate, async (req, res) => {
   try {
@@ -60,7 +52,7 @@ router.post("/", authenticate, async (req, res) => {
       return res.status(400).json({ detail: `Sheets used (${total_sheets_used}) exceeds available sheets (${sheets_available})` });
     }
 
-    const job_number = await generateJobNumber();
+    const job_number = await nextSequence(PrintingJob, "job_number", JOB_NUMBER_PREFIX, JOB_NUMBER_WIDTH);
 
     const job = await PrintingJob.create({
       id,
@@ -81,7 +73,7 @@ router.post("/", authenticate, async (req, res) => {
       { $inc: { sheets_used: total_sheets_used } }
     );
 
-    logActivity({ action: "CREATE", entity_type: "printing_job", entity_id: id, entity_label: job_number, user: req.user, details: `Created printing job ${job_number} (${total_bodies} bodies, ${total_sheets_used} sheets)`, ip_address: req.ip });
+    await logActivity({ action: "CREATE", entity_type: "printing_job", entity_id: id, entity_label: job_number, user: req.user, details: `Created printing job ${job_number} (${total_bodies} bodies, ${total_sheets_used} sheets)`, ip_address: req.ip });
 
     res.json(job.toObject({ versionKey: false }));
   } catch (error) {
@@ -162,7 +154,7 @@ router.put("/:jobId", authenticate, async (req, res) => {
       return res.status(404).json({ detail: "Job not found" });
     }
 
-    logActivity({ action: "UPDATE", entity_type: "printing_job", entity_id: req.params.jobId, user: req.user, details: `Updated printing job`, ip_address: req.ip });
+    await logActivity({ action: "UPDATE", entity_type: "printing_job", entity_id: req.params.jobId, user: req.user, details: `Updated printing job`, ip_address: req.ip });
 
     res.json({ message: "Job updated successfully" });
   } catch (error) {
@@ -185,7 +177,7 @@ router.delete("/:jobId", authenticate, async (req, res) => {
 
     await PrintingJob.deleteOne({ id: req.params.jobId });
 
-    logActivity({ action: "DELETE", entity_type: "printing_job", entity_id: req.params.jobId, entity_label: job.job_number, user: req.user, details: `Deleted printing job ${job.job_number}`, ip_address: req.ip });
+    await logActivity({ action: "DELETE", entity_type: "printing_job", entity_id: req.params.jobId, entity_label: job.job_number, user: req.user, details: `Deleted printing job ${job.job_number}`, ip_address: req.ip });
 
     res.json({ message: "Job deleted successfully" });
   } catch (error) {

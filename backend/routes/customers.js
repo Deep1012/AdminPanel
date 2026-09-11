@@ -33,7 +33,7 @@ router.post("/", authenticate, adminRequired, async (req, res) => {
       created_at: new Date().toISOString(),
     });
 
-    logActivity({ action: "CREATE", entity_type: "customer", entity_id: customer.id, entity_label: name.trim(), user: req.user, details: `Created customer "${name.trim()}"`, ip_address: req.ip });
+    await logActivity({ action: "CREATE", entity_type: "customer", entity_id: customer.id, entity_label: name.trim(), user: req.user, details: `Created customer "${name.trim()}"`, ip_address: req.ip });
 
     res.json(customer.toObject({ versionKey: false }));
   } catch (error) {
@@ -56,7 +56,7 @@ router.put("/:customerId", authenticate, adminRequired, async (req, res) => {
       return res.status(404).json({ detail: "Customer not found" });
     }
 
-    logActivity({ action: "UPDATE", entity_type: "customer", entity_id: req.params.customerId, entity_label: name.trim(), user: req.user, details: `Updated customer to "${name.trim()}"`, ip_address: req.ip });
+    await logActivity({ action: "UPDATE", entity_type: "customer", entity_id: req.params.customerId, entity_label: name.trim(), user: req.user, details: `Updated customer to "${name.trim()}"`, ip_address: req.ip });
 
     res.json({ message: "Customer updated successfully" });
   } catch (error) {
@@ -72,7 +72,7 @@ router.delete("/:customerId", authenticate, adminRequired, async (req, res) => {
       return res.status(404).json({ detail: "Customer not found" });
     }
 
-    logActivity({ action: "DELETE", entity_type: "customer", entity_id: req.params.customerId, entity_label: existing?.name, user: req.user, details: `Deleted customer "${existing?.name || ""}"`, ip_address: req.ip });
+    await logActivity({ action: "DELETE", entity_type: "customer", entity_id: req.params.customerId, entity_label: existing?.name, user: req.user, details: `Deleted customer "${existing?.name || ""}"`, ip_address: req.ip });
 
     res.json({ message: "Customer deleted successfully" });
   } catch (error) {

@@ -17,7 +17,7 @@ const connectDB = async () => {
       .connect(process.env.MONGO_URL, {
         dbName: "timestin_crm",
         bufferCommands: false,
-        maxPoolSize: process.env.VERCEL ? 1 : 5,
+        maxPoolSize: 5,
         serverSelectionTimeoutMS: 5000,
         socketTimeoutMS: 45000,
       })

@@ -13,7 +13,7 @@ router.post("/", authenticate, adminRequired, async (req, res) => {
 
     const brand = await Brand.create({ id, name: req.body.name, created_at: now });
 
-    logActivity({ action: "CREATE", entity_type: "brand", entity_id: id, entity_label: req.body.name, user: req.user, details: `Created brand "${req.body.name}"`, ip_address: req.ip });
+    await logActivity({ action: "CREATE", entity_type: "brand", entity_id: id, entity_label: req.body.name, user: req.user, details: `Created brand "${req.body.name}"`, ip_address: req.ip });
 
     res.json({ id: brand.id, name: brand.name, created_at: brand.created_at });
   } catch (error) {
@@ -40,7 +40,7 @@ router.put("/:brandId", authenticate, adminRequired, async (req, res) => {
     const result = await Brand.updateOne({ id: req.params.brandId }, { $set: updateData });
     if (result.matchedCount === 0) return res.status(404).json({ detail: "Brand not found" });
 
-    logActivity({ action: "UPDATE", entity_type: "brand", entity_id: req.params.brandId, entity_label: name, user: req.user, details: `Updated brand${name ? ` "${name}"` : ""}${is_lwbf !== undefined ? ` (LWBF: ${is_lwbf})` : ""}`, ip_address: req.ip });
+    await logActivity({ action: "UPDATE", entity_type: "brand", entity_id: req.params.brandId, entity_label: name, user: req.user, details: `Updated brand${name ? ` "${name}"` : ""}${is_lwbf !== undefined ? ` (LWBF: ${is_lwbf})` : ""}`, ip_address: req.ip });
 
     res.json({ message: "Brand updated successfully" });
   } catch (error) {
@@ -56,7 +56,7 @@ router.delete("/:brandId", authenticate, adminRequired, async (req, res) => {
       return res.status(404).json({ detail: "Brand not found" });
     }
 
-    logActivity({ action: "DELETE", entity_type: "brand", entity_id: req.params.brandId, entity_label: existing?.name, user: req.user, details: `Deleted brand "${existing?.name || ""}"`, ip_address: req.ip });
+    await logActivity({ action: "DELETE", entity_type: "brand", entity_id: req.params.brandId, entity_label: existing?.name, user: req.user, details: `Deleted brand "${existing?.name || ""}"`, ip_address: req.ip });
 
     res.json({ message: "Brand deleted successfully" });
   } catch (error) {
