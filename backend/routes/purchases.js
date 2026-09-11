@@ -33,7 +33,7 @@ function findInvalidSheetInput(values) {
   return null;
 }
 
-router.post("/", authenticate, async (req, res) => {
+router.post("/", authenticate, async (req, res, next) => {
   try {
     const { gauge, size1, size2, temper, weight, supplier, invoice_number, purchase_date } = req.body;
 
@@ -71,11 +71,11 @@ router.post("/", authenticate, async (req, res) => {
     // response cannot disagree with the next read of the same lot.
     res.json(withComputedSheets(purchase.toObject({ versionKey: false })));
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
-router.get("/", authenticate, async (req, res) => {
+router.get("/", authenticate, async (req, res, next) => {
   try {
     const purchases = await Purchase.find({}, { _id: 0, __v: 0 }).sort({ purchase_date: -1 }).lean();
     // sheets_available is derived here, not read. A lean() query returns
@@ -85,11 +85,11 @@ router.get("/", authenticate, async (req, res) => {
     // this replaces. withComputedSheets discards it and recomputes.
     res.json(purchases.map(withComputedSheets));
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
-router.get("/available", authenticate, async (req, res) => {
+router.get("/available", authenticate, async (req, res, next) => {
   try {
     const purchases = await Purchase.find(
       {},
@@ -118,11 +118,11 @@ router.get("/available", authenticate, async (req, res) => {
     }
     res.json(available);
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
-router.put("/:purchaseId", authenticate, async (req, res) => {
+router.put("/:purchaseId", authenticate, async (req, res, next) => {
   try {
     const { sr_no, gauge, size1, size2, temper, weight, supplier, invoice_number, purchase_date } = req.body;
     const updateData = {
@@ -167,11 +167,11 @@ router.put("/:purchaseId", authenticate, async (req, res) => {
 
     res.json({ message: "Purchase updated successfully" });
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
-router.delete("/:purchaseId", authenticate, async (req, res) => {
+router.delete("/:purchaseId", authenticate, async (req, res, next) => {
   try {
     // Reject if printing jobs are linked to this raw material
     const linkedJobs = await PrintingJob.countDocuments({ raw_material_id: req.params.purchaseId });
@@ -189,7 +189,7 @@ router.delete("/:purchaseId", authenticate, async (req, res) => {
 
     res.json({ message: "Purchase deleted successfully" });
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 

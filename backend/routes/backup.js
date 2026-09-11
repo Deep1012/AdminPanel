@@ -79,7 +79,7 @@ async function createBackup(triggerUser) {
 // Vercel Cron monthly backup endpoint.
 // Registered for GET and POST: Vercel Cron issues GET, but the schedule was
 // originally wired to POST, so accept both rather than depend on the platform.
-async function cronBackupHandler(req, res) {
+async function cronBackupHandler(req, res, next) {
   try {
     // Fail closed: an unset CRON_SECRET must never make the endpoint public.
     if (!process.env.CRON_SECRET) {
@@ -96,7 +96,7 @@ async function cronBackupHandler(req, res) {
     const backup = await createBackup(null);
     res.json({ message: "Monthly backup created", id: backup.id, size_bytes: backup.size_bytes });
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 }
 
@@ -104,7 +104,7 @@ router.get("/cron", cronBackupHandler);
 router.post("/cron", cronBackupHandler);
 
 // GET /api/backups - list all backups (without full data)
-router.get("/", authenticate, adminRequired, async (req, res) => {
+router.get("/", authenticate, adminRequired, async (req, res, next) => {
   try {
     const backups = await Backup.find({}, { _id: 0, __v: 0, collections: 0 })
       .sort({ timestamp: -1 })
@@ -112,12 +112,12 @@ router.get("/", authenticate, adminRequired, async (req, res) => {
       .lean();
     res.json(backups);
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
 // POST /api/backups - trigger manual backup
-router.post("/", authenticate, adminRequired, async (req, res) => {
+router.post("/", authenticate, adminRequired, async (req, res, next) => {
   try {
     const backup = await createBackup(req.user);
     res.json({
@@ -128,29 +128,29 @@ router.post("/", authenticate, adminRequired, async (req, res) => {
       size_bytes: backup.size_bytes,
     });
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
 // GET /api/backups/:id - download a specific backup
-router.get("/:backupId", authenticate, adminRequired, async (req, res) => {
+router.get("/:backupId", authenticate, adminRequired, async (req, res, next) => {
   try {
     const backup = await Backup.findOne({ id: req.params.backupId }, { _id: 0, __v: 0 }).lean();
     if (!backup) return res.status(404).json({ detail: "Backup not found" });
     res.json(backup);
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
 // DELETE /api/backups/:id
-router.delete("/:backupId", authenticate, adminRequired, async (req, res) => {
+router.delete("/:backupId", authenticate, adminRequired, async (req, res, next) => {
   try {
     const result = await Backup.deleteOne({ id: req.params.backupId });
     if (result.deletedCount === 0) return res.status(404).json({ detail: "Backup not found" });
     res.json({ message: "Backup deleted successfully" });
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 

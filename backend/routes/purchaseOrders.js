@@ -25,19 +25,19 @@ async function generateSerialNo(dateStr) {
 }
 
 // GET all purchase orders
-router.get("/", authenticate, async (req, res) => {
+router.get("/", authenticate, async (req, res, next) => {
   try {
     const orders = await PurchaseOrder.find({}, { _id: 0, __v: 0 })
       .sort({ date: -1 })
       .lean();
     res.json(orders);
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
 // POST create purchase order
-router.post("/", authenticate, async (req, res) => {
+router.post("/", authenticate, async (req, res, next) => {
   try {
     const { date, company_name, brand_id, brand_name, size_id, size_name, quantity, notes } = req.body;
 
@@ -72,12 +72,12 @@ router.post("/", authenticate, async (req, res) => {
     if (error.code === 11000) {
       return res.status(409).json({ detail: "Duplicate serial number. Please try again." });
     }
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
 // PUT update purchase order
-router.put("/:poId", authenticate, async (req, res) => {
+router.put("/:poId", authenticate, async (req, res, next) => {
   try {
     const { notes, date, company_name, brand_id, brand_name, size_id, size_name, quantity } = req.body;
 
@@ -116,12 +116,12 @@ router.put("/:poId", authenticate, async (req, res) => {
     const updatedPO = await PurchaseOrder.findOne({ id: req.params.poId }, { _id: 0, __v: 0 }).lean();
     res.json(updatedPO);
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
 // PUT mark purchase order as completed / uncompleted
-router.put("/:poId/complete", authenticate, async (req, res) => {
+router.put("/:poId/complete", authenticate, async (req, res, next) => {
   try {
     const po = await PurchaseOrder.findOne({ id: req.params.poId }).lean();
     if (!po) return res.status(404).json({ detail: "Purchase order not found" });
@@ -142,12 +142,12 @@ router.put("/:poId/complete", authenticate, async (req, res) => {
     const updated = await PurchaseOrder.findOne({ id: req.params.poId }, { _id: 0, __v: 0 }).lean();
     res.json(updated);
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
 // DELETE purchase order
-router.delete("/:poId", authenticate, async (req, res) => {
+router.delete("/:poId", authenticate, async (req, res, next) => {
   try {
     const po = await PurchaseOrder.findOne({ id: req.params.poId }).lean();
     if (!po) return res.status(404).json({ detail: "Purchase order not found" });
@@ -165,7 +165,7 @@ router.delete("/:poId", authenticate, async (req, res) => {
 
     res.json({ message: "Purchase order deleted successfully" });
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 

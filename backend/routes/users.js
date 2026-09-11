@@ -5,12 +5,19 @@ const { authenticate, adminRequired } = require("../middleware/auth");
 
 const router = express.Router();
 
-router.get("/", authenticate, adminRequired, async (req, res) => {
+router.get("/", authenticate, adminRequired, async (req, res, next) => {
   try {
-    const users = await User.find({}, { _id: 0, password: 0, __v: 0 }).lean();
+    // failed_login_count/locked_until are login-throttle bookkeeping, not
+    // user-facing fields, and are projected out to keep this response
+    // contract unchanged. Note the PUT below writes an explicit allowlist,
+    // so an administrator can never set them by hand either.
+    const users = await User.find(
+      {},
+      { _id: 0, password: 0, __v: 0, failed_login_count: 0, locked_until: 0 }
+    ).lean();
     res.json(users);
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
@@ -22,7 +29,7 @@ router.get("/", authenticate, adminRequired, async (req, res) => {
 // denies rather than grants) but it silently strips the user's access.
 const ALLOWED_ROLES = ["admin", "user"];
 
-router.put("/:userId", authenticate, adminRequired, async (req, res) => {
+router.put("/:userId", authenticate, adminRequired, async (req, res, next) => {
   try {
     const { username, email, role, is_locked, password } = req.body;
 
@@ -61,11 +68,11 @@ router.put("/:userId", authenticate, adminRequired, async (req, res) => {
     if (error.code === 11000) {
       return res.status(400).json({ detail: "Email already registered to another user" });
     }
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
-router.delete("/:userId", authenticate, adminRequired, async (req, res) => {
+router.delete("/:userId", authenticate, adminRequired, async (req, res, next) => {
   try {
     const result = await User.deleteOne({ id: req.params.userId });
     if (result.deletedCount === 0) {
@@ -73,7 +80,7 @@ router.delete("/:userId", authenticate, adminRequired, async (req, res) => {
     }
     res.json({ message: "User deleted successfully" });
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 

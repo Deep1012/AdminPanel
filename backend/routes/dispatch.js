@@ -42,7 +42,7 @@ function respondToPoError(res, error) {
   throw error;
 }
 
-router.post("/", authenticate, async (req, res) => {
+router.post("/", authenticate, async (req, res, next) => {
   try {
     const { customer_name, notes, dispatch_date } = req.body;
 
@@ -135,32 +135,32 @@ router.post("/", authenticate, async (req, res) => {
 
     res.json(normalizeDispatch(entry));
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
 // GET single dispatch by ID
-router.get("/:dispatchId", authenticate, async (req, res) => {
+router.get("/:dispatchId", authenticate, async (req, res, next) => {
   try {
     const entry = await Dispatch.findOne({ id: req.params.dispatchId }, { _id: 0, __v: 0 }).lean();
     if (!entry) return res.status(404).json({ detail: "Dispatch not found" });
     res.json(normalizeDispatch(entry));
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
 // GET all dispatches
-router.get("/", authenticate, async (req, res) => {
+router.get("/", authenticate, async (req, res, next) => {
   try {
     const entries = await Dispatch.find({}, { _id: 0, __v: 0 }).sort({ dispatch_date: -1 }).lean();
     res.json(entries.map(normalizeDispatch));
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
-router.put("/:dispatchId", authenticate, async (req, res) => {
+router.put("/:dispatchId", authenticate, async (req, res, next) => {
   try {
     const { notes, customer_name, dispatch_date } = req.body;
 
@@ -252,11 +252,11 @@ router.put("/:dispatchId", authenticate, async (req, res) => {
     const updated = await Dispatch.findOne({ id: req.params.dispatchId }, { _id: 0, __v: 0 }).lean();
     res.json(normalizeDispatch(updated));
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
-router.delete("/:dispatchId", authenticate, async (req, res) => {
+router.delete("/:dispatchId", authenticate, async (req, res, next) => {
   try {
     const dispatch = await Dispatch.findOne({ id: req.params.dispatchId }).lean();
     if (!dispatch) return res.status(404).json({ detail: "Dispatch not found" });
@@ -279,7 +279,7 @@ router.delete("/:dispatchId", authenticate, async (req, res) => {
 
     res.json({ message: "Dispatch deleted successfully" });
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 

@@ -12,7 +12,7 @@ const { reconcile, DEFAULT_SAMPLE_LIMIT } = require("../lib/reconcile");
 const router = express.Router();
 
 // POST /api/admin/clear-operational-data
-router.post("/clear-operational-data", authenticate, adminRequired, async (req, res) => {
+router.post("/clear-operational-data", authenticate, adminRequired, async (req, res, next) => {
   try {
     const [purchases, printingJobs, production, dispatches, purchaseOrders] = await Promise.all([
       Purchase.deleteMany({}),
@@ -35,7 +35,7 @@ router.post("/clear-operational-data", authenticate, adminRequired, async (req, 
       },
     });
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
@@ -54,7 +54,7 @@ router.post("/clear-operational-data", authenticate, adminRequired, async (req, 
  * are always complete. The cap keeps the response well inside the ~4.5MB
  * serverless response ceiling.
  */
-router.get("/reconcile", authenticate, adminRequired, async (req, res) => {
+router.get("/reconcile", authenticate, adminRequired, async (req, res, next) => {
   try {
     const requested = parseInt(req.query.sample_limit, 10);
     const sampleLimit = Number.isInteger(requested)
@@ -68,12 +68,12 @@ router.get("/reconcile", authenticate, adminRequired, async (req, res) => {
 
     res.json(report);
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
 // GET /api/admin/activity-logs
-router.get("/activity-logs", authenticate, adminRequired, async (req, res) => {
+router.get("/activity-logs", authenticate, adminRequired, async (req, res, next) => {
   try {
     const { action, entity_type, username, from, to, page = 1, limit = 50 } = req.query;
 
@@ -116,12 +116,12 @@ router.get("/activity-logs", authenticate, adminRequired, async (req, res) => {
       totalPages: Math.ceil(total / limitNum),
     });
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
 // GET /api/admin/activity-logs/stats
-router.get("/activity-logs/stats", authenticate, adminRequired, async (req, res) => {
+router.get("/activity-logs/stats", authenticate, adminRequired, async (req, res, next) => {
   try {
     const [totalLogs, actionCounts, todayCount] = await Promise.all([
       ActivityLog.countDocuments(),
@@ -140,7 +140,7 @@ router.get("/activity-logs/stats", authenticate, adminRequired, async (req, res)
       by_action: actionCounts.reduce((acc, { _id, count }) => ({ ...acc, [_id]: count }), {}),
     });
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 

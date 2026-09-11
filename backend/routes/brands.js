@@ -6,7 +6,7 @@ const { logActivity } = require("../lib/activityLogger");
 
 const router = express.Router();
 
-router.post("/", authenticate, adminRequired, async (req, res) => {
+router.post("/", authenticate, adminRequired, async (req, res, next) => {
   try {
     const id = uuidv4();
     const now = new Date().toISOString();
@@ -17,20 +17,20 @@ router.post("/", authenticate, adminRequired, async (req, res) => {
 
     res.json({ id: brand.id, name: brand.name, created_at: brand.created_at });
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
-router.get("/", authenticate, async (req, res) => {
+router.get("/", authenticate, async (req, res, next) => {
   try {
     const brands = await Brand.find({}, { _id: 0, __v: 0 }).lean();
     res.json(brands);
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
-router.put("/:brandId", authenticate, adminRequired, async (req, res) => {
+router.put("/:brandId", authenticate, adminRequired, async (req, res, next) => {
   try {
     const { name, is_lwbf } = req.body;
     const updateData = {};
@@ -44,11 +44,11 @@ router.put("/:brandId", authenticate, adminRequired, async (req, res) => {
 
     res.json({ message: "Brand updated successfully" });
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
-router.delete("/:brandId", authenticate, adminRequired, async (req, res) => {
+router.delete("/:brandId", authenticate, adminRequired, async (req, res, next) => {
   try {
     const existing = await Brand.findOne({ id: req.params.brandId }, { name: 1 }).lean();
     const result = await Brand.deleteOne({ id: req.params.brandId });
@@ -60,7 +60,7 @@ router.delete("/:brandId", authenticate, adminRequired, async (req, res) => {
 
     res.json({ message: "Brand deleted successfully" });
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 

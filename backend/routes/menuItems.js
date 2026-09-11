@@ -24,19 +24,19 @@ const DEFAULT_MENU_ITEMS = [
 ];
 
 // GET all menu items (all authenticated users)
-router.get("/", authenticate, async (req, res) => {
+router.get("/", authenticate, async (req, res, next) => {
   try {
     const items = await MenuItem.find({ is_active: true }, { _id: 0, __v: 0 })
       .sort({ display_order: 1 })
       .lean();
     res.json(items);
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
 // POST create new menu item (admin only)
-router.post("/", authenticate, adminRequired, async (req, res) => {
+router.post("/", authenticate, adminRequired, async (req, res, next) => {
   try {
     const { label, path, icon, admin_only } = req.body;
     if (!label || !path || !icon) {
@@ -63,12 +63,12 @@ router.post("/", authenticate, adminRequired, async (req, res) => {
 
     res.json(item.toObject({ versionKey: false }));
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
 // PUT update menu item (admin only)
-router.put("/:id", authenticate, adminRequired, async (req, res) => {
+router.put("/:id", authenticate, adminRequired, async (req, res, next) => {
   try {
     const { label, path, icon, admin_only, is_active } = req.body;
     const updateData = {};
@@ -88,12 +88,12 @@ router.put("/:id", authenticate, adminRequired, async (req, res) => {
     const updated = await MenuItem.findOne({ id: req.params.id }, { _id: 0, __v: 0 }).lean();
     res.json(updated);
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
 // PUT reorder all menu items (admin only)
-router.put("/", authenticate, adminRequired, async (req, res) => {
+router.put("/", authenticate, adminRequired, async (req, res, next) => {
   try {
     const { items } = req.body;
     if (!Array.isArray(items)) return res.status(400).json({ detail: "Items array required" });
@@ -106,12 +106,12 @@ router.put("/", authenticate, adminRequired, async (req, res) => {
     const updated = await MenuItem.find({}, { _id: 0, __v: 0 }).sort({ display_order: 1 }).lean();
     res.json(updated);
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
 // DELETE menu item (admin only, reject system items)
-router.delete("/:id", authenticate, adminRequired, async (req, res) => {
+router.delete("/:id", authenticate, adminRequired, async (req, res, next) => {
   try {
     const item = await MenuItem.findOne({ id: req.params.id }).lean();
     if (!item) return res.status(404).json({ detail: "Menu item not found" });
@@ -120,12 +120,12 @@ router.delete("/:id", authenticate, adminRequired, async (req, res) => {
     await MenuItem.deleteOne({ id: req.params.id });
     res.json({ message: "Menu item deleted successfully" });
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
 // POST seed default menu items (admin only)
-router.post("/seed-defaults", authenticate, adminRequired, async (req, res) => {
+router.post("/seed-defaults", authenticate, adminRequired, async (req, res, next) => {
   try {
     const count = await MenuItem.countDocuments();
     if (count > 0) return res.status(400).json({ detail: "Menu items already exist. Clear them first if you want to re-seed." });
@@ -141,7 +141,7 @@ router.post("/seed-defaults", authenticate, adminRequired, async (req, res) => {
     await MenuItem.insertMany(docs);
     res.json({ message: `Seeded ${docs.length} menu items`, count: docs.length });
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 

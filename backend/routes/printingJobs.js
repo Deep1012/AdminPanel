@@ -37,7 +37,7 @@ const router = express.Router();
 const JOB_NUMBER_PREFIX = "JOB-";
 const JOB_NUMBER_WIDTH = 3;
 
-router.post("/", authenticate, async (req, res) => {
+router.post("/", authenticate, async (req, res, next) => {
   try {
     const { raw_material_id, sizes, notes, job_date, sheets_used } = req.body;
     const id = uuidv4();
@@ -131,11 +131,11 @@ router.post("/", authenticate, async (req, res) => {
 
     res.json(job.toObject({ versionKey: false }));
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
-router.get("/", authenticate, async (req, res) => {
+router.get("/", authenticate, async (req, res, next) => {
   try {
     const jobs = await PrintingJob.find({}, { _id: 0, __v: 0 }).sort({ job_date: -1 }).lean();
     const result = jobs.map((j) => {
@@ -154,11 +154,11 @@ router.get("/", authenticate, async (req, res) => {
     });
     res.json(result);
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
-router.put("/:jobId", authenticate, async (req, res) => {
+router.put("/:jobId", authenticate, async (req, res, next) => {
   try {
     const { notes, job_date, sizes, sheets_used } = req.body;
     const updateData = {
@@ -244,11 +244,11 @@ router.put("/:jobId", authenticate, async (req, res) => {
 
     res.json({ message: "Job updated successfully" });
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
-router.delete("/:jobId", authenticate, async (req, res) => {
+router.delete("/:jobId", authenticate, async (req, res, next) => {
   try {
     const job = await PrintingJob.findOne({ id: req.params.jobId }).lean();
     if (!job) return res.status(404).json({ detail: "Job not found" });
@@ -268,7 +268,7 @@ router.delete("/:jobId", authenticate, async (req, res) => {
 
     res.json({ message: "Job deleted successfully" });
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 

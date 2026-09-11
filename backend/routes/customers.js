@@ -6,16 +6,16 @@ const { logActivity } = require("../lib/activityLogger");
 
 const router = express.Router();
 
-router.get("/", authenticate, async (req, res) => {
+router.get("/", authenticate, async (req, res, next) => {
   try {
     const customers = await Customer.find({}, { _id: 0, __v: 0 }).sort({ name: 1 }).lean();
     res.json(customers);
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
-router.post("/", authenticate, adminRequired, async (req, res) => {
+router.post("/", authenticate, adminRequired, async (req, res, next) => {
   try {
     const { name } = req.body;
     if (!name || !name.trim()) {
@@ -37,11 +37,11 @@ router.post("/", authenticate, adminRequired, async (req, res) => {
 
     res.json(customer.toObject({ versionKey: false }));
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
-router.put("/:customerId", authenticate, adminRequired, async (req, res) => {
+router.put("/:customerId", authenticate, adminRequired, async (req, res, next) => {
   try {
     const { name } = req.body;
     if (!name || !name.trim()) {
@@ -60,11 +60,11 @@ router.put("/:customerId", authenticate, adminRequired, async (req, res) => {
 
     res.json({ message: "Customer updated successfully" });
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
-router.delete("/:customerId", authenticate, adminRequired, async (req, res) => {
+router.delete("/:customerId", authenticate, adminRequired, async (req, res, next) => {
   try {
     const existing = await Customer.findOne({ id: req.params.customerId }, { name: 1 }).lean();
     const result = await Customer.deleteOne({ id: req.params.customerId });
@@ -76,7 +76,7 @@ router.delete("/:customerId", authenticate, adminRequired, async (req, res) => {
 
     res.json({ message: "Customer deleted successfully" });
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 

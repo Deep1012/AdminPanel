@@ -23,7 +23,7 @@ const { EXPORT_ROW_LIMIT, checkExportPayload } = require("../lib/exportSize");
 
 const router = express.Router();
 
-router.get("/stats", authenticate, async (req, res) => {
+router.get("/stats", authenticate, async (req, res, next) => {
   try {
     // Use lean() and minimal projections for performance
     const [purchases, printingJobs, production, dispatches, purchaseOrders] = await Promise.all([
@@ -113,11 +113,11 @@ router.get("/stats", authenticate, async (req, res) => {
       ...(date_counts ? { date_counts } : {}),
     });
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
-router.get("/purchase-stock", authenticate, async (req, res) => {
+router.get("/purchase-stock", authenticate, async (req, res, next) => {
   try {
     const purchases = await Purchase.find({}, { _id: 0, __v: 0 }).lean();
 
@@ -158,12 +158,12 @@ router.get("/purchase-stock", authenticate, async (req, res) => {
 
     res.json({ aggregated: Object.values(stockMap), individual, gauges });
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
 // Production trend - supports ?period=daily|weekly|monthly
-router.get("/production-trend", authenticate, async (req, res) => {
+router.get("/production-trend", authenticate, async (req, res, next) => {
   try {
     const period = req.query.period || "monthly";
     const production = await Production.find({}, { production_date: 1, quantity_produced: 1, _id: 0 }).lean();
@@ -217,12 +217,12 @@ router.get("/production-trend", authenticate, async (req, res) => {
 
     res.json(Object.values(buckets));
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
 // Recent activity - last 10 entries across all modules
-router.get("/recent-activity", authenticate, async (req, res) => {
+router.get("/recent-activity", authenticate, async (req, res, next) => {
   try {
     const [purchases, jobs, production, dispatches, orders] = await Promise.all([
       Purchase.find({}, { id: 1, sr_no: 1, purchase_date: 1, _id: 0 }).sort({ purchase_date: -1 }).limit(5).lean(),
@@ -243,12 +243,12 @@ router.get("/recent-activity", authenticate, async (req, res) => {
     activity.sort((a, b) => new Date(b.date) - new Date(a.date));
     res.json(activity.slice(0, 10));
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
 // PO summary for dashboard
-router.get("/po-summary", authenticate, async (req, res) => {
+router.get("/po-summary", authenticate, async (req, res, next) => {
   try {
     const allOrders = await PurchaseOrder.find(
       {},
@@ -262,12 +262,12 @@ router.get("/po-summary", authenticate, async (req, res) => {
       latest: allOrders,
     });
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
 // Keep legacy endpoints
-router.get("/printing-stock-list", authenticate, async (req, res) => {
+router.get("/printing-stock-list", authenticate, async (req, res, next) => {
   try {
     const [jobs, production] = await Promise.all([
       PrintingJob.find({}, { sizes: 1, sheets_from_material: 1, _id: 0 }).lean(),
@@ -294,11 +294,11 @@ router.get("/printing-stock-list", authenticate, async (req, res) => {
     for (const key of Object.keys(stockMap)) stockMap[key].available = availablePrintingStock(stockMap[key].printing_done, stockMap[key].used_in_production);
     res.json(Object.values(stockMap));
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
-router.get("/finished-goods-list", authenticate, async (req, res) => {
+router.get("/finished-goods-list", authenticate, async (req, res, next) => {
   try {
     const [production, dispatches] = await Promise.all([
       Production.find({}, { size_name: 1, brand_name: 1, quantity_produced: 1, _id: 0 }).lean(),
@@ -321,12 +321,12 @@ router.get("/finished-goods-list", authenticate, async (req, res) => {
     for (const key of Object.keys(stockMap)) stockMap[key].available = finishedGoodsAvailable(stockMap[key].produced, stockMap[key].dispatched);
     res.json(Object.values(stockMap));
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
 // Global export - return all exportable data in one call
-router.get("/export-all", authenticate, async (req, res) => {
+router.get("/export-all", authenticate, async (req, res, next) => {
   try {
     // ROW_LIMIT was 10,000 *per collection* across six collections, which can
     // serialise to tens of megabytes — far past the ~4.5MB Vercel allows a
@@ -353,7 +353,7 @@ router.get("/export-all", authenticate, async (req, res) => {
     // a second time.
     res.type("application/json").send(checked.body);
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 

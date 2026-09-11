@@ -5,12 +5,15 @@ const { v4: uuidv4 } = require("uuid");
 const User = require("../models/User");
 const { authenticate, adminRequired } = require("../middleware/auth");
 const { logActivity } = require("../lib/activityLogger");
+const { verifyPassword } = require("../lib/passwordVerify");
+const { throttleRejection, recordFailedAttempt, clearThrottle } = require("../lib/loginThrottle");
+const { resolveLoginAttempt, RECORD_FAILURE, CLEAR_THROTTLE } = require("../lib/loginOutcome");
 
 const router = express.Router();
 
 const ALLOWED_ROLES = ["admin", "user"];
 
-router.post("/register", authenticate, adminRequired, async (req, res) => {
+router.post("/register", authenticate, adminRequired, async (req, res, next) => {
   try {
     const { username, email, password, role = "user" } = req.body;
 
@@ -49,11 +52,11 @@ router.post("/register", authenticate, adminRequired, async (req, res) => {
       created_at: user.created_at,
     });
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
-router.post("/login", async (req, res) => {
+router.post("/login", async (req, res, next) => {
   try {
     const { email, password } = req.body;
 
@@ -65,12 +68,42 @@ router.post("/login", async (req, res) => {
     }
 
     const user = await User.findOne({ email });
-    if (!user || !(await bcrypt.compare(password, user.password))) {
-      return res.status(401).json({ detail: "Invalid credentials" });
+
+    // 1. Brute-force cooldown, before any bcrypt work, so a locked-out
+    //    attacker cannot keep burning CPU. The counter lives on the user row
+    //    rather than in process memory because concurrent requests to a
+    //    serverless deployment land in separate instances, where an in-memory
+    //    limiter is bypassed simply by issuing the guesses in parallel.
+    const throttled = throttleRejection(user);
+    if (throttled) {
+      // Correct HTTP for a cooldown, alongside the { detail } the UI reads.
+      res.set("Retry-After", String(throttled.retry_after_seconds));
+      return res.status(throttled.status).json({ detail: throttled.detail });
     }
 
-    if (user.is_locked) {
-      return res.status(403).json({ detail: "Account is locked" });
+    // 2. Always compare, against a dummy hash when no user matched. The old
+    //    `!user || !(await bcrypt.compare(...))` short-circuited, so bcrypt
+    //    (~50-150ms) ran only for real accounts and response latency
+    //    enumerated valid emails. See lib/passwordVerify.js.
+    const passwordMatches = await verifyPassword(password, user && user.password);
+
+    // 3. The 401 / 403 / 200 decision, in lib/loginOutcome.js so the ordering
+    //    of the three rejections is unit-testable. Note 403 is decided AFTER
+    //    the compare above, so an admin-locked account is not distinguishable
+    //    by response time.
+    const outcome = resolveLoginAttempt({ user, passwordMatches });
+
+    // 4. The throttle bookkeeping the outcome calls for. Both helpers write
+    //    only failed_login_count/locked_until — never is_locked — so neither
+    //    can create nor release an administrator's permanent lock.
+    if (outcome.action === RECORD_FAILURE) {
+      await recordFailedAttempt(User, user);
+    } else if (outcome.action === CLEAR_THROTTLE) {
+      await clearThrottle(User, user);
+    }
+
+    if (!outcome.ok) {
+      return res.status(outcome.status).json({ detail: outcome.detail });
     }
 
     const token = jwt.sign(
@@ -91,11 +124,11 @@ router.post("/login", async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
-router.get("/me", authenticate, async (req, res) => {
+router.get("/me", authenticate, async (req, res, next) => {
   res.json(req.user);
 });
 

@@ -11,7 +11,12 @@ const authenticate = async (req, res, next) => {
     const token = authHeader.split(" ")[1];
     const payload = jwt.verify(token, process.env.JWT_SECRET);
 
-    const user = await User.findOne({ id: payload.user_id }).select("-password -_id -__v");
+    // failed_login_count/locked_until are excluded so they never reach
+    // req.user and therefore never leak through GET /api/auth/me. The
+    // permanent, admin-controlled is_locked flag below is a different
+    // thing entirely and is still read here (see lib/loginThrottle.js).
+    const user = await User.findOne({ id: payload.user_id })
+      .select("-password -_id -__v -failed_login_count -locked_until");
     if (!user) {
       return res.status(401).json({ detail: "User not found" });
     }

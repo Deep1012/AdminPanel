@@ -16,7 +16,7 @@ const ALL_EXCLUDED_BRANDS = [...CASCADING_BRAND_NAMES, ...LWBF_CASCADING_BRAND_N
 
 const router = express.Router();
 
-router.post("/", authenticate, async (req, res) => {
+router.post("/", authenticate, async (req, res, next) => {
   try {
     const { brand_id, brand_name, size_id, size_name, quantity_produced, printing_stock_used = 0, printing_job_id, notes, production_date } = req.body;
     const id = uuidv4();
@@ -144,7 +144,7 @@ router.post("/", authenticate, async (req, res) => {
 
     res.json(entry.toObject({ versionKey: false }));
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
@@ -162,7 +162,7 @@ router.post("/", authenticate, async (req, res) => {
  * Filters: brand_name, size_name, search, date_from, date_to, exclude_cascade.
  * Ordering: sort (allowlisted) + order (asc|desc). See lib/productionList.js.
  */
-router.get("/", authenticate, async (req, res) => {
+router.get("/", authenticate, async (req, res, next) => {
   try {
     const plan = buildProductionListQuery(req.query);
     if (plan.error) {
@@ -171,7 +171,7 @@ router.get("/", authenticate, async (req, res) => {
 
     res.json(await fetchProductionList(Production, plan));
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
@@ -181,7 +181,7 @@ router.get("/", authenticate, async (req, res) => {
 // plus a decision about what to do with the cascade children whose
 // printing_stock_used is rewritten below. GET /api/admin/reconcile surfaces
 // the resulting drift in the meantime.
-router.put("/:prodId", authenticate, async (req, res) => {
+router.put("/:prodId", authenticate, async (req, res, next) => {
   try {
     const { brand_id, brand_name, size_id, size_name, quantity_produced, printing_stock_used, notes, production_date } = req.body;
     const updateData = {
@@ -217,11 +217,11 @@ router.put("/:prodId", authenticate, async (req, res) => {
 
     res.json({ message: "Production entry updated successfully" });
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
-router.delete("/:prodId", authenticate, async (req, res) => {
+router.delete("/:prodId", authenticate, async (req, res, next) => {
   try {
     const entry = await Production.findOne({ id: req.params.prodId }).lean();
     if (!entry) return res.status(404).json({ detail: "Production entry not found" });
@@ -235,7 +235,7 @@ router.delete("/:prodId", authenticate, async (req, res) => {
 
     res.json({ message: `Deleted ${deleteResult.deletedCount} production entry(s)` });
   } catch (error) {
-    res.status(500).json({ detail: error.message });
+    next(error);
   }
 });
 
