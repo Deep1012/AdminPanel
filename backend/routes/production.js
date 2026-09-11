@@ -8,6 +8,7 @@ const { applyAvailabilityPolicy } = require("../lib/availabilityPolicy");
 const { logActivity } = require("../lib/activityLogger");
 const { printingAvailability, availableFor } = require("../lib/availability");
 const { toNumber } = require("../lib/stock");
+const { buildProductionListQuery, fetchProductionList } = require("../lib/productionList");
 
 const CASCADING_BRAND_NAMES = ["BOTTOM", "TOP", "LID"];
 const LWBF_CASCADING_BRAND_NAMES = ["BOTTOM LWBF", "LID LWBF"];
@@ -147,14 +148,28 @@ router.post("/", authenticate, async (req, res) => {
   }
 });
 
+/**
+ * GET /api/production
+ *
+ * Two response shapes, chosen by the caller:
+ *  - no `page` and no `limit`  -> a bare array, exactly as before. Every other
+ *    reader (Finished Goods, the dashboard) depends on that and on the cascade
+ *    rows being present in it.
+ *  - `page` or `limit` present -> { data, total, page, limit, total_pages },
+ *    with cascade brands excluded by default so `total` matches what the
+ *    Production page renders.
+ *
+ * Filters: brand_name, size_name, search, date_from, date_to, exclude_cascade.
+ * Ordering: sort (allowlisted) + order (asc|desc). See lib/productionList.js.
+ */
 router.get("/", authenticate, async (req, res) => {
   try {
-    const entries = await Production.find({}, { _id: 0, __v: 0 }).sort({ production_date: -1 }).lean();
-    const result = entries.map((e) => {
-      if (e.printing_stock_used === undefined) e.printing_stock_used = 0;
-      return e;
-    });
-    res.json(result);
+    const plan = buildProductionListQuery(req.query);
+    if (plan.error) {
+      return res.status(400).json({ detail: plan.error });
+    }
+
+    res.json(await fetchProductionList(Production, plan));
   } catch (error) {
     res.status(500).json({ detail: error.message });
   }

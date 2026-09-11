@@ -19,6 +19,7 @@ const {
   availablePrintingStock,
   finishedGoodsAvailable,
 } = require("../lib/stock");
+const { EXPORT_ROW_LIMIT, checkExportPayload } = require("../lib/exportSize");
 
 const router = express.Router();
 
@@ -327,7 +328,13 @@ router.get("/finished-goods-list", authenticate, async (req, res) => {
 // Global export - return all exportable data in one call
 router.get("/export-all", authenticate, async (req, res) => {
   try {
-    const ROW_LIMIT = 10000;
+    // ROW_LIMIT was 10,000 *per collection* across six collections, which can
+    // serialise to tens of megabytes — far past the ~4.5MB Vercel allows a
+    // serverless function to return. Over that, the platform kills the response
+    // and the caller gets an opaque error instead of a reason. The lower cap
+    // bounds what is read into memory; checkExportPayload below is the honest
+    // guard. See lib/exportSize.js.
+    const ROW_LIMIT = EXPORT_ROW_LIMIT;
     const [purchases, printingJobs, production, dispatches, purchaseOrders, customers] = await Promise.all([
       Purchase.find({}, { _id: 0, __v: 0 }).sort({ purchase_date: -1 }).limit(ROW_LIMIT).lean(),
       PrintingJob.find({}, { _id: 0, __v: 0 }).sort({ job_date: -1 }).limit(ROW_LIMIT).lean(),
@@ -337,7 +344,14 @@ router.get("/export-all", authenticate, async (req, res) => {
       require("../models/Customer").find({}, { _id: 0, __v: 0 }).sort({ name: 1 }).limit(ROW_LIMIT).lean(),
     ]);
 
-    res.json({ purchases, printingJobs, production, dispatches, purchaseOrders, customers });
+    const checked = checkExportPayload({ purchases, printingJobs, production, dispatches, purchaseOrders, customers });
+    if (!checked.ok) {
+      return res.status(413).json({ detail: checked.detail });
+    }
+
+    // Already serialised by the size check; sent as-is rather than stringified
+    // a second time.
+    res.type("application/json").send(checked.body);
   } catch (error) {
     res.status(500).json({ detail: error.message });
   }
