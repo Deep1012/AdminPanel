@@ -130,11 +130,12 @@ Dark industrial theme ("Tactical Factory"). Safety orange primary (`#ea580c`), d
 
 **No CI:** there is no `.github/workflows`. Both deploys are manual CLI invocations from a developer machine; `render.yaml` is an unattached blueprint for a standby backend.
 
-## Repo Layout Warning
-The live application is `backend/` and `frontend/` at the repo root. The tracked `AdminDashboard/` subdirectory is a legacy snapshot (older duplicate of both apps plus Python test scaffolding) and is **not deployed** — never edit it when making changes.
+## Further Reading
+- [ARCHITECTURE.md](ARCHITECTURE.md) — request lifecycle, serverless constraints, known gaps
+- [CRM.md](CRM.md) — operator-facing user guide
 
 ## Conventions
-- Forms use react-hook-form + zod validation
+- Forms are hand-rolled `useState` + manual checks. `react-hook-form` and `zod` are installed but **not used anywhere** — don't assume validation exists; see [ARCHITECTURE.md](ARCHITECTURE.md) *Known gaps*
 - Toast notifications via sonner (bottom-right)
 - Charts via recharts
 - Excel export via xlsx (file-saver)
