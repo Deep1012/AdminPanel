@@ -47,6 +47,7 @@ const TablePagination = ({ currentPage, totalPages, pageSize, totalItems, startI
                     onClick={() => onPageChange(1)}
                     disabled={currentPage === 1}
                     data-testid="page-first"
+                    aria-label="First page"
                 >
                     <ChevronsLeft className="w-4 h-4" />
                 </Button>
@@ -57,6 +58,7 @@ const TablePagination = ({ currentPage, totalPages, pageSize, totalItems, startI
                     onClick={() => onPageChange(currentPage - 1)}
                     disabled={currentPage === 1}
                     data-testid="page-prev"
+                    aria-label="Previous page"
                 >
                     <ChevronLeft className="w-4 h-4" />
                 </Button>
@@ -70,6 +72,7 @@ const TablePagination = ({ currentPage, totalPages, pageSize, totalItems, startI
                     onClick={() => onPageChange(currentPage + 1)}
                     disabled={currentPage === totalPages}
                     data-testid="page-next"
+                    aria-label="Next page"
                 >
                     <ChevronRight className="w-4 h-4" />
                 </Button>
@@ -80,6 +83,7 @@ const TablePagination = ({ currentPage, totalPages, pageSize, totalItems, startI
                     onClick={() => onPageChange(totalPages)}
                     disabled={currentPage === totalPages}
                     data-testid="page-last"
+                    aria-label="Last page"
                 >
                     <ChevronsRight className="w-4 h-4" />
                 </Button>

@@ -357,7 +357,7 @@ const Dispatch = () => {
                                                         <span className="text-xs text-muted-foreground italic">{item.notes}</span>
                                                     )}
                                                 </div>
-                                                <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => handleRemoveItem(idx)} data-testid={'remove-dispatch-item-' + idx}><Trash2 className="w-3 h-3" /></Button>
+                                                <Button aria-label="Remove this item from the dispatch" type="button" variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => handleRemoveItem(idx)} data-testid={'remove-dispatch-item-' + idx}><Trash2 className="w-3 h-3" /></Button>
                                             </div>
                                         ))}
                                     </div>
@@ -428,8 +428,8 @@ const Dispatch = () => {
                                             <td className="text-muted-foreground">{d.updated_by || '-'}</td>
                                             <td>
                                                 <div className="flex gap-1">
-                                                    <Button variant="ghost" size="icon" onClick={() => openEdit(d)} className="text-muted-foreground hover:text-primary" data-testid={'edit-dispatch-' + d.id}><Pencil className="w-4 h-4" /></Button>
-                                                    <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(d.id)} className="text-muted-foreground hover:text-destructive" data-testid={`delete-dispatch-${d.id}`}><Trash2 className="w-4 h-4" /></Button>
+                                                    <Button aria-label="Edit dispatch" variant="ghost" size="icon" onClick={() => openEdit(d)} className="text-muted-foreground hover:text-primary" data-testid={'edit-dispatch-' + d.id}><Pencil className="w-4 h-4" /></Button>
+                                                    <Button aria-label="Delete dispatch" variant="ghost" size="icon" onClick={() => setDeleteTarget(d.id)} className="text-muted-foreground hover:text-destructive" data-testid={`delete-dispatch-${d.id}`}><Trash2 className="w-4 h-4" /></Button>
                                                 </div>
                                             </td>
                                         </tr>

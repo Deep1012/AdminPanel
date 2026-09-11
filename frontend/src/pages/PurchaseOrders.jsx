@@ -388,7 +388,7 @@ const PurchaseOrders = () => {
                                                     <Badge variant="outline">{item.size_name}</Badge>
                                                     <Badge variant="secondary" className="font-mono">{formatNumber(item.quantity)} qty</Badge>
                                                 </div>
-                                                <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => handleRemoveItem(idx)} data-testid={'remove-po-item-' + idx}><Trash2 className="w-3 h-3" /></Button>
+                                                <Button aria-label="Remove this item from the order" type="button" variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => handleRemoveItem(idx)} data-testid={'remove-po-item-' + idx}><Trash2 className="w-3 h-3" /></Button>
                                             </div>
                                         ))}
                                     </div>
@@ -580,7 +580,7 @@ const PurchaseOrders = () => {
                                                 <td className="text-muted-foreground">{po.created_by}</td>
                                                 <td>
                                                     <div className="flex gap-1">
-                                                        <Button
+                                                        <Button aria-label="Mark purchase order complete or reopen it"
                                                             variant="ghost" size="icon"
                                                             onClick={() => handleToggleComplete(po)}
                                                             className={po.is_completed ? 'text-muted-foreground hover:text-warning' : 'text-muted-foreground hover:text-success'}
@@ -590,9 +590,9 @@ const PurchaseOrders = () => {
                                                             {po.is_completed ? <RotateCcw className="w-4 h-4" /> : <Check className="w-4 h-4" />}
                                                         </Button>
                                                         {!po.is_completed && (
-                                                            <Button variant="ghost" size="icon" onClick={() => openEdit(po)} className="text-muted-foreground hover:text-primary" data-testid={'edit-po-' + po.id}><Pencil className="w-4 h-4" /></Button>
+                                                            <Button aria-label="Edit purchase order" variant="ghost" size="icon" onClick={() => openEdit(po)} className="text-muted-foreground hover:text-primary" data-testid={'edit-po-' + po.id}><Pencil className="w-4 h-4" /></Button>
                                                         )}
-                                                        <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(po.id)} className="text-muted-foreground hover:text-destructive"><Trash2 className="w-4 h-4" /></Button>
+                                                        <Button aria-label="Delete purchase order" variant="ghost" size="icon" onClick={() => setDeleteTarget(po.id)} className="text-muted-foreground hover:text-destructive"><Trash2 className="w-4 h-4" /></Button>
                                                     </div>
                                                 </td>
                                             </tr>

@@ -421,7 +421,7 @@ const Printing = () => {
                                                     <span className="text-sm">{entry.brand_name}</span>
                                                     <Badge variant="secondary" className="font-mono">{formatNumber(entry.bodies_count)} bodies</Badge>
                                                 </div>
-                                                <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => handleRemoveEntry(idx)} data-testid={'remove-entry-' + idx}><Trash2 className="w-3 h-3" /></Button>
+                                                <Button aria-label="Remove this brand entry from the job" type="button" variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => handleRemoveEntry(idx)} data-testid={'remove-entry-' + idx}><Trash2 className="w-3 h-3" /></Button>
                                             </div>
                                         ))}
                                     </div>
@@ -556,7 +556,7 @@ const Printing = () => {
                                                     <span className="text-sm">{entry.brand_name}</span>
                                                     <Badge variant="secondary" className="font-mono">{formatNumber(entry.bodies_count)} bodies</Badge>
                                                 </div>
-                                                <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => removeEditEntry(idx)} data-testid={'remove-edit-entry-' + idx}><Trash2 className="w-3 h-3" /></Button>
+                                                <Button aria-label="Remove this brand entry from the job" type="button" variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => removeEditEntry(idx)} data-testid={'remove-edit-entry-' + idx}><Trash2 className="w-3 h-3" /></Button>
                                             </div>
                                         ))}
                                     </div>
@@ -645,8 +645,8 @@ const Printing = () => {
                                             <td className="text-muted-foreground">{row.updated_by || '-'}</td>
                                             <td>
                                                 <div className="flex gap-1">
-                                                    <Button variant="ghost" size="icon" onClick={() => openEdit(row)} className="text-muted-foreground hover:text-primary" data-testid={'edit-job-' + row.id}><Pencil className="w-4 h-4" /></Button>
-                                                    <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(row.id)} className="text-muted-foreground hover:text-destructive" data-testid={`delete-job-${row.id}`}><Trash2 className="w-4 h-4" /></Button>
+                                                    <Button aria-label="Edit printing job" variant="ghost" size="icon" onClick={() => openEdit(row)} className="text-muted-foreground hover:text-primary" data-testid={'edit-job-' + row.id}><Pencil className="w-4 h-4" /></Button>
+                                                    <Button aria-label="Delete printing job" variant="ghost" size="icon" onClick={() => setDeleteTarget(row.id)} className="text-muted-foreground hover:text-destructive" data-testid={`delete-job-${row.id}`}><Trash2 className="w-4 h-4" /></Button>
                                                 </div>
                                             </td>
                                         </tr>

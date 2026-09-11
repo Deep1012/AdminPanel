@@ -181,8 +181,8 @@ const Customers = () => {
                                             <td className="text-muted-foreground">{formatDate(customer.created_at)}</td>
                                             <td>
                                                 <div className="flex gap-1">
-                                                    <Button variant="ghost" size="icon" onClick={() => openEdit(customer)} className="text-muted-foreground hover:text-primary" data-testid={'edit-customer-' + customer.id}><Pencil className="w-4 h-4" /></Button>
-                                                    <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(customer.id)} className="text-muted-foreground hover:text-destructive"><Trash2 className="w-4 h-4" /></Button>
+                                                    <Button aria-label="Edit customer" variant="ghost" size="icon" onClick={() => openEdit(customer)} className="text-muted-foreground hover:text-primary" data-testid={'edit-customer-' + customer.id}><Pencil className="w-4 h-4" /></Button>
+                                                    <Button aria-label="Delete customer" variant="ghost" size="icon" onClick={() => setDeleteTarget(customer.id)} className="text-muted-foreground hover:text-destructive"><Trash2 className="w-4 h-4" /></Button>
                                                 </div>
                                             </td>
                                         </tr>

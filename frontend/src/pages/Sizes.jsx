@@ -181,8 +181,8 @@ const Sizes = () => {
                                             <td className="text-muted-foreground">{formatDate(size.created_at)}</td>
                                             <td>
                                                 <div className="flex gap-1">
-                                                    <Button variant="ghost" size="icon" onClick={() => openEdit(size)} className="text-muted-foreground hover:text-primary" data-testid={'edit-size-' + size.id}><Pencil className="w-4 h-4" /></Button>
-                                                    <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(size.id)} className="text-muted-foreground hover:text-destructive"><Trash2 className="w-4 h-4" /></Button>
+                                                    <Button aria-label="Edit size" variant="ghost" size="icon" onClick={() => openEdit(size)} className="text-muted-foreground hover:text-primary" data-testid={'edit-size-' + size.id}><Pencil className="w-4 h-4" /></Button>
+                                                    <Button aria-label="Delete size" variant="ghost" size="icon" onClick={() => setDeleteTarget(size.id)} className="text-muted-foreground hover:text-destructive"><Trash2 className="w-4 h-4" /></Button>
                                                 </div>
                                             </td>
                                         </tr>

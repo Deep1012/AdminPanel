@@ -265,8 +265,8 @@ const Admin = () => {
                                             </td>
                                             <td>
                                                 <div className="flex gap-1">
-                                                    <Button variant="ghost" size="icon" onClick={() => openEdit(user)} className="text-muted-foreground hover:text-primary" data-testid={'edit-user-' + user.id}><Pencil className="w-4 h-4" /></Button>
-                                                    <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(user.id)} className="text-muted-foreground hover:text-destructive"><Trash2 className="w-4 h-4" /></Button>
+                                                    <Button aria-label="Edit user" variant="ghost" size="icon" onClick={() => openEdit(user)} className="text-muted-foreground hover:text-primary" data-testid={'edit-user-' + user.id}><Pencil className="w-4 h-4" /></Button>
+                                                    <Button aria-label="Delete user" variant="ghost" size="icon" onClick={() => setDeleteTarget(user.id)} className="text-muted-foreground hover:text-destructive"><Trash2 className="w-4 h-4" /></Button>
                                                 </div>
                                             </td>
                                         </tr>

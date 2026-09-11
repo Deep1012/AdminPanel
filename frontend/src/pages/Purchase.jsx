@@ -395,8 +395,8 @@ const Purchase = () => {
                                             <td className="text-muted-foreground">{p.updated_by || '-'}</td>
                                             <td>
                                                 <div className="flex gap-1">
-                                                    <Button variant="ghost" size="icon" onClick={() => openEdit(p)} className="text-muted-foreground hover:text-primary" data-testid={'edit-purchase-' + p.id}><Pencil className="w-4 h-4" /></Button>
-                                                    <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(p.id)} className="text-muted-foreground hover:text-destructive"><Trash2 className="w-4 h-4" /></Button>
+                                                    <Button aria-label="Edit raw material entry" variant="ghost" size="icon" onClick={() => openEdit(p)} className="text-muted-foreground hover:text-primary" data-testid={'edit-purchase-' + p.id}><Pencil className="w-4 h-4" /></Button>
+                                                    <Button aria-label="Delete raw material entry" variant="ghost" size="icon" onClick={() => setDeleteTarget(p.id)} className="text-muted-foreground hover:text-destructive"><Trash2 className="w-4 h-4" /></Button>
                                                 </div>
                                             </td>
                                         </tr>

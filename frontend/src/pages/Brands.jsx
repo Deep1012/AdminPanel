@@ -188,8 +188,8 @@ const Brands = () => {
                                             <td className="text-muted-foreground">{formatDate(brand.created_at)}</td>
                                             <td>
                                                 <div className="flex gap-1">
-                                                    <Button variant="ghost" size="icon" onClick={() => openEdit(brand)} className="text-muted-foreground hover:text-primary" data-testid={'edit-brand-' + brand.id}><Pencil className="w-4 h-4" /></Button>
-                                                    <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(brand.id)} className="text-muted-foreground hover:text-destructive"><Trash2 className="w-4 h-4" /></Button>
+                                                    <Button aria-label="Edit brand" variant="ghost" size="icon" onClick={() => openEdit(brand)} className="text-muted-foreground hover:text-primary" data-testid={'edit-brand-' + brand.id}><Pencil className="w-4 h-4" /></Button>
+                                                    <Button aria-label="Delete brand" variant="ghost" size="icon" onClick={() => setDeleteTarget(brand.id)} className="text-muted-foreground hover:text-destructive"><Trash2 className="w-4 h-4" /></Button>
                                                 </div>
                                             </td>
                                         </tr>

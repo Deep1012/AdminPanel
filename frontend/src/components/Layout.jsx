@@ -267,6 +267,8 @@ export const Layout = ({ children }) => {
                             variant="ghost"
                             size="icon"
                             className="lg:hidden"
+                            aria-label="Open navigation menu"
+                            aria-expanded={mobileOpen}
                             onClick={() => setMobileOpen(!mobileOpen)}
                             data-testid="mobile-menu-btn"
                         >
@@ -276,6 +278,7 @@ export const Layout = ({ children }) => {
                             variant="ghost"
                             size="icon"
                             className="hidden lg:flex text-muted-foreground hover:text-foreground h-8 w-8"
+                            aria-label="Collapse or expand the sidebar"
                             onClick={toggleSidebar}
                             data-testid="sidebar-toggle"
                         >
@@ -297,6 +300,7 @@ export const Layout = ({ children }) => {
                                             variant="outline"
                                             size="icon"
                                             className="h-9 w-9 rounded-sm"
+                                            aria-label="Export all data to Excel"
                                             onClick={handleGlobalExport}
                                             disabled={exporting}
                                             data-testid="global-export-btn"

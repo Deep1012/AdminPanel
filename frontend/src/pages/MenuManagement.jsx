@@ -251,11 +251,11 @@ const MenuManagement = () => {
                                                 <td>{item.is_system ? <Badge variant="outline">System</Badge> : '-'}</td>
                                                 <td>
                                                     <div className="flex gap-1">
-                                                        <Button variant="ghost" size="icon" onClick={() => moveItem(idx, -1)} disabled={idx === 0} className="text-muted-foreground hover:text-primary h-8 w-8"><ArrowUp className="w-3 h-3" /></Button>
-                                                        <Button variant="ghost" size="icon" onClick={() => moveItem(idx, 1)} disabled={idx === items.length - 1} className="text-muted-foreground hover:text-primary h-8 w-8"><ArrowDown className="w-3 h-3" /></Button>
-                                                        <Button variant="ghost" size="icon" onClick={() => openEdit(item)} className="text-muted-foreground hover:text-primary h-8 w-8" data-testid={'edit-menu-item-' + item.id}><Pencil className="w-3 h-3" /></Button>
+                                                        <Button variant="ghost" size="icon" aria-label="Move item up" onClick={() => moveItem(idx, -1)} disabled={idx === 0} className="text-muted-foreground hover:text-primary h-8 w-8"><ArrowUp className="w-3 h-3" /></Button>
+                                                        <Button variant="ghost" size="icon" aria-label="Move item down" onClick={() => moveItem(idx, 1)} disabled={idx === items.length - 1} className="text-muted-foreground hover:text-primary h-8 w-8"><ArrowDown className="w-3 h-3" /></Button>
+                                                        <Button aria-label="Edit item" variant="ghost" size="icon" onClick={() => openEdit(item)} className="text-muted-foreground hover:text-primary h-8 w-8" data-testid={'edit-menu-item-' + item.id}><Pencil className="w-3 h-3" /></Button>
                                                         {!item.is_system && (
-                                                            <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(item.id)} className="text-muted-foreground hover:text-destructive h-8 w-8"><Trash2 className="w-3 h-3" /></Button>
+                                                            <Button aria-label="Delete item" variant="ghost" size="icon" onClick={() => setDeleteTarget(item.id)} className="text-muted-foreground hover:text-destructive h-8 w-8"><Trash2 className="w-3 h-3" /></Button>
                                                         )}
                                                     </div>
                                                 </td>
