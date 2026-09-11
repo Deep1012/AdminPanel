@@ -87,12 +87,38 @@ The only automation is a Vercel Cron entry in [backend/vercel.json](backend/verc
 
 Never delete `backend/.vercel` or `frontend/.netlify` — they link the local directories to the deployed projects.
 
+## Stock formulas vs reality — read this before trusting any stock number
+
+CLAUDE.md documents two invariants that **the live data contradicts**. Measured read-only via `GET /api/admin/reconcile` on 2026-09-11:
+
+```
+negative_printing_stock_available   144 of 173 (size, brand) buckets  (83%)
+negative_finished_goods_available    59 buckets
+production rows                   1,420
+production rows linked to a printing job   0     <- not one
+printing jobs in the database        50
+```
+
+No production row references a printing job, and 59 brand/size pairs have dispatched more than was recorded as produced. The factory records production without the printing behind it and ships inventory that predates the system.
+
+So `Available Printing Stock = Printing Done − Used in Production` and `Finished Goods Available = Produced − Dispatched` describe an **intended** model, not this operation. Guards enforcing them exist but run in warn-only mode — see [backend/lib/availabilityPolicy.js](backend/lib/availabilityPolicy.js), which holds the single `MODE` constant and the measurements behind the decision. A test asserts the mode, so flipping it is deliberate. **Re-run the reconcile endpoint before ever flipping it.**
+
+Guards the data does support are enforced as hard rejections: positive-quantity validation, PO remaining capacity, and raw-material sheet availability (both measured at zero drift).
+
+## Data volumes
+
+~2,000 documents total (Purchase 176, PrintingJob 50, Production 1,420, Dispatch 147, PurchaseOrder 239). Small enough that most scaling work is premature — dashboard aggregation pipelines were explicitly dropped as such. `Production` is the one collection that grows fast, because the cascade writes 4 rows per normal-brand entry and 6 for LWBF brands; it alone has server-side pagination.
+
+The real performance problem is the frontend bundle: **1,543 KB of JavaScript in a single chunk** to render those 2,000 documents.
+
 ## Known gaps
 
-Verified in the 2026-09-11 review, and worth knowing before you trust the code:
+Verified in the September 2026 review:
 
-- **No tests exist**, and no runner is installed. ESLint 9 is present but has no flat config, so it only runs inside craco's dev overlay.
-- **`react-hook-form` and `zod` are dependencies but unused.** Every form is hand-rolled `useState` plus truthy checks, so negative and non-numeric values reach the backend.
-- **Stock guards are incomplete.** Production does not check available printing stock; dispatch does not check available finished goods.
-- **Multi-document writes are not transactional.** Dispatch→PO sync, printing-job→sheet deduction, and the production cascade are separate Mongoose calls; a failure midway leaves the collections diverged.
-- **`Purchase.sheets_available` is a stored field that is never maintained** and disagrees with the computed value shown on the Raw Material Stock page.
+- **Stock guards are reported, not enforced** — see the section above. This is deliberate and measured, not an oversight.
+- **`Production` PUT does not re-check availability** when an edit raises `printing_stock_used`, and `printing_stock_used: 0` (what the Excel import sends when the column is blank) bypasses the production check entirely while still recording finished goods.
+- **The production availability check cannot be atomic** without transactions — it aggregates over two collections with no counter document to guard, so two simultaneous entries can both pass.
+- **No route-level tests.** There is no supertest or HTTP harness; decision logic was extracted into `backend/lib/` and unit-tested there (216 tests), leaving status codes, write ordering and logging verified by inspection only.
+- **Multi-document writes are still not transactional.** Where a sequence cannot be made atomic, writes are ordered so the recoverable state is the one you land in — e.g. PO counters move before the dispatch row exists, failing into a PO that looks *more* dispatched than it is (visible and conservative) rather than less. Each such site is commented.
+- **41 dangling PO references and one over-dispatched PO** exist in historical data. The fixes prevent recurrence but do not clean up the past; `/api/admin/reconcile` lists them.
+- **`/api/admin/reconcile` has no UI** — it is API-only.
