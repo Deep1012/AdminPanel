@@ -71,11 +71,12 @@ Node.js + Express + Mongoose. Structured into models, routes, middleware, and co
 - `server.js` - Express app entry, CORS, route mounting
 - `config/db.js` - MongoDB Atlas connection via Mongoose
 - `middleware/auth.js` - JWT verification (`authenticate`) and role gate (`adminRequired`)
-- `models/` - Mongoose schemas: User, Brand, Size, Purchase, PrintingJob, Production, Dispatch, PurchaseOrder, MenuItem, Customer
-- `routes/` - Express routers: auth, users, brands, sizes, purchases, printingJobs, production, dispatch, dashboard, purchaseOrders, customers, menuItems, admin
+- `models/` - Mongoose schemas: User, Brand, Size, Purchase, PrintingJob, Production, Dispatch, PurchaseOrder, MenuItem, Customer, ActivityLog, Backup
+- `routes/` - Express routers: auth, users, brands, sizes, purchases, printingJobs, production, dispatch, dashboard, purchaseOrders, customers, menuItems, admin, backup
+- `lib/activityLogger.js` - `logActivity()` audit-trail helper; never throws (failures are logged, not propagated)
 - `seed-data.js` - Standalone seed script (`npm run seed`) — clears operational data and inserts 12 entries per collection
 
-**Collections:** `users`, `brands`, `sizes`, `purchases`, `printingjobs`, `productions`, `dispatches`, `purchaseorders`, `customers`, `menuitems`
+**Collections:** `users`, `brands`, `sizes`, `purchases`, `printingjobs`, `productions`, `dispatches`, `purchaseorders`, `customers`, `menuitems`, `activitylogs`, `backups`
 
 **Key model fields:**
 - `Brand.is_lwbf` (Boolean) — flags brands that trigger LWBF cascade in production
@@ -95,7 +96,7 @@ React 19 + CRA (via craco) + Tailwind CSS 3 + shadcn/ui (new-york style, JSX not
 - `src/context/AuthContext.js` - Auth state (token in localStorage, user object)
 - `src/components/Layout.jsx` - Sidebar + header shell wrapping all protected pages
 - `src/components/ui/` - shadcn/ui primitives (do not edit manually; use shadcn CLI to add)
-- `src/pages/` - Route pages: Login, Dashboard, PurchaseOrders, Purchase, Printing, Production, Dispatch, Brands, Sizes, Customers, Admin, MenuManagement, RawMaterialStock, PrintingStock, FinishedGoods
+- `src/pages/` - Route pages: Login, Dashboard, PurchaseOrders, Purchase, Printing, Production, Dispatch, Brands, Sizes, Customers, Admin, MenuManagement, RawMaterialStock, PrintingStock, FinishedGoods, ActivityLogs
 - `src/lib/iconMap.js` - Maps icon name strings to lucide-react components (used by dynamic menu)
 - `src/components/SearchableSelect.jsx` - Searchable dropdown for customer selection
 - `src/hooks/usePagination.js` - Client-side pagination hook (all tables)
@@ -124,6 +125,13 @@ Dark industrial theme ("Tactical Factory"). Safety orange primary (`#ea580c`), d
 - **Deploy backend:** `cd backend && npx vercel deploy --prod --yes`
 - **Deploy frontend:** `cd frontend && REACT_APP_BACKEND_URL=https://timestin-backend.vercel.app npx craco build && npx netlify-cli deploy --prod --dir=build --site=6e3e1c00-9360-4154-85f6-4bfe7e75c2a7 --no-build`
 - **Vercel Cron:** Monthly backup runs on 1st of each month via `/api/backups/cron`
+
+**Serverless constraints (Vercel):** `server.js` exports the Express app instead of calling `app.listen`, and everything process-lifetime-dependent is gated behind `!process.env.VERCEL`. Mongoose connections are promise-cached on `globalThis` (`config/db.js`) so concurrent cold starts share one handshake; a per-request middleware awaits that connection before any route runs. In-process `node-cron` schedules never fire on Vercel — recurring work must go through a `vercel.json` cron entry hitting an endpoint guarded by `CRON_SECRET`. Responses are capped at 4.5MB, which is why backup size is limited to 4MB there.
+
+**No CI:** there is no `.github/workflows`. Both deploys are manual CLI invocations from a developer machine; `render.yaml` is an unattached blueprint for a standby backend.
+
+## Repo Layout Warning
+The live application is `backend/` and `frontend/` at the repo root. The tracked `AdminDashboard/` subdirectory is a legacy snapshot (older duplicate of both apps plus Python test scaffolding) and is **not deployed** — never edit it when making changes.
 
 ## Conventions
 - Forms use react-hook-form + zod validation
