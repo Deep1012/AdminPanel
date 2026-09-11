@@ -17,6 +17,7 @@ import { formatDate } from '../lib/utils';
 import { Trash2, Pencil, Loader2, AlertCircle, Lock, Unlock, UserPlus, Download, DatabaseZap } from 'lucide-react';
 import { toast } from 'sonner';
 import { exportToExcel } from '../lib/exportToExcel';
+import { getErrorMessage } from '../lib/errors';
 
 const USERS_EXPORT_COLUMNS = [
     { header: 'Username', key: 'username' },
@@ -50,7 +51,7 @@ const Admin = () => {
 
     const fetchData = async () => {
         try { setLoading(true); const res = await usersAPI.getAll(); setUsers(res.data); }
-        catch (err) { toast.error('Failed to load users'); }
+        catch (err) { toast.error(getErrorMessage(err, 'Failed to load users')); }
         finally { setLoading(false); }
     };
 
@@ -77,19 +78,19 @@ const Admin = () => {
                 toast.success(`User created! Credentials: ${formData.email} / ${formData.password}`);
             }
             setDialogOpen(false); fetchData();
-        } catch (err) { toast.error(err.response?.data?.detail || 'Failed to save user'); }
+        } catch (err) { toast.error(getErrorMessage(err, 'Failed to save user')); }
         finally { setSubmitting(false); }
     };
 
     const handleToggleLock = async (userId, currentLock) => {
         try { await usersAPI.update(userId, { is_locked: !currentLock }); toast.success(`User ${!currentLock ? 'locked' : 'unlocked'}`); fetchData(); }
-        catch (err) { toast.error('Failed to update user'); }
+        catch (err) { toast.error(getErrorMessage(err, 'Failed to update user')); }
     };
 
     const handleDelete = async () => {
         if (!deleteTarget) return;
         try { await usersAPI.delete(deleteTarget); toast.success('User deleted'); fetchData(); }
-        catch (err) { toast.error('Failed to delete user'); }
+        catch (err) { toast.error(getErrorMessage(err, 'Failed to delete user')); }
         finally { setDeleteTarget(null); }
     };
 
@@ -100,7 +101,7 @@ const Admin = () => {
             const d = res.data.deleted;
             toast.success(`Cleared: ${d.purchases} purchases, ${d.printingJobs} jobs, ${d.production} production, ${d.dispatches} dispatches, ${d.purchaseOrders} POs`);
             setClearDataOpen(false);
-        } catch (err) { toast.error(err.response?.data?.detail || 'Failed to clear data'); }
+        } catch (err) { toast.error(getErrorMessage(err, 'Failed to clear data')); }
         finally { setClearing(false); }
     };
 

@@ -20,6 +20,7 @@ import { Plus, Trash2, Pencil, Printer, Loader2, AlertCircle, Layers, Download }
 import { toast } from 'sonner';
 import { exportToExcel } from '../lib/exportToExcel';
 import ImportExcelButton from '../components/ImportExcelButton';
+import { getErrorMessage } from '../lib/errors';
 
 const PRINTING_EXPORT_COLUMNS = [
     { header: 'Date', key: 'job_date', transform: (v) => formatDate(v) },
@@ -113,7 +114,7 @@ const Printing = () => {
                 printingAPI.getAll(), brandsAPI.getAll(), sizesAPI.getAll(), purchaseAPI.getAvailable()
             ]);
             setJobs(jobsRes.data); setBrands(brandsRes.data); setSizes(sizesRes.data); setAvailableMaterials(materialsRes.data);
-        } catch (err) { toast.error('Failed to load data'); }
+        } catch (err) { toast.error(getErrorMessage(err, 'Failed to load data')); }
         finally { setLoading(false); }
     };
 
@@ -161,7 +162,7 @@ const Printing = () => {
                 job_date: new Date(formData.job_date).toISOString(),
             });
             toast.success('Printing job created'); setDialogOpen(false); resetForm(); fetchData();
-        } catch (err) { toast.error(err.response?.data?.detail || 'Failed to create job'); }
+        } catch (err) { toast.error(getErrorMessage(err, 'Failed to create job')); }
         finally { setSubmitting(false); }
     };
 
@@ -213,14 +214,14 @@ const Printing = () => {
                 notes: editForm.notes || null,
             });
             toast.success('Job updated'); setEditDialogOpen(false); fetchData();
-        } catch (err) { toast.error('Failed to update job'); }
+        } catch (err) { toast.error(getErrorMessage(err, 'Failed to update job')); }
         finally { setSubmitting(false); }
     };
 
     const handleDelete = async () => {
         if (!deleteTarget) return;
         try { await printingAPI.delete(deleteTarget); toast.success('Job deleted'); fetchData(); }
-        catch (err) { toast.error('Failed to delete job'); }
+        catch (err) { toast.error(getErrorMessage(err, 'Failed to delete job')); }
         finally { setDeleteTarget(null); }
     };
 

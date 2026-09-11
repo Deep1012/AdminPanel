@@ -21,6 +21,7 @@ import { Plus, Trash2, Pencil, Factory, Loader2, AlertCircle, Download } from 'l
 import { toast } from 'sonner';
 import { exportToExcel } from '../lib/exportToExcel';
 import ImportExcelButton from '../components/ImportExcelButton';
+import { getErrorMessage } from '../lib/errors';
 
 const PRODUCTION_EXPORT_COLUMNS = [
     { header: 'Date', key: 'production_date', transform: (v) => formatDate(v) },
@@ -84,7 +85,7 @@ const Production = () => {
                 productionAPI.getAll(), brandsAPI.getAll(), sizesAPI.getAll(), dashboardAPI.getPrintingStockList()
             ]);
             setProduction(prodRes.data); setBrands(brandsRes.data); setSizes(sizesRes.data); setPrintingStock(stockRes.data);
-        } catch (err) { toast.error('Failed to load data'); }
+        } catch (err) { toast.error(getErrorMessage(err, 'Failed to load data')); }
         finally { setLoading(false); }
     };
 
@@ -121,14 +122,14 @@ const Production = () => {
             if (editingId) { await productionAPI.update(editingId, payload); toast.success('Entry updated'); }
             else { await productionAPI.create(payload); toast.success('Entry added'); }
             setDialogOpen(false); fetchData();
-        } catch (err) { toast.error('Failed to save entry'); }
+        } catch (err) { toast.error(getErrorMessage(err, 'Failed to save entry')); }
         finally { setSubmitting(false); }
     };
 
     const handleDelete = async () => {
         if (!deleteTarget) return;
         try { await productionAPI.delete(deleteTarget); toast.success('Entry deleted'); fetchData(); }
-        catch (err) { toast.error('Failed to delete'); }
+        catch (err) { toast.error(getErrorMessage(err, 'Failed to delete')); }
         finally { setDeleteTarget(null); }
     };
 

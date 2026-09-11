@@ -6,6 +6,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Package, AlertCircle, Loader2 } from 'lucide-react';
+import { getErrorMessage } from '../lib/errors';
 
 const Login = () => {
     const [email, setEmail] = useState('');
@@ -23,7 +24,7 @@ const Login = () => {
             await login(email, password);
             navigate('/dashboard');
         } catch (err) {
-            setError(err.response?.data?.detail || 'Login failed. Please check your credentials.');
+            setError(getErrorMessage(err, 'Login failed. Please check your credentials.'));
         } finally {
             setLoading(false);
         }

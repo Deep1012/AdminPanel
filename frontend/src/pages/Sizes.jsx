@@ -16,6 +16,7 @@ import { Plus, Trash2, Pencil, Ruler, Loader2, AlertCircle, Download } from 'luc
 import { toast } from 'sonner';
 import { exportToExcel } from '../lib/exportToExcel';
 import ImportExcelButton from '../components/ImportExcelButton';
+import { getErrorMessage } from '../lib/errors';
 
 const SIZES_EXPORT_COLUMNS = [
     { header: '#', key: 'id', transform: (v, row, idx) => idx + 1 },
@@ -43,7 +44,7 @@ const Sizes = () => {
 
     const fetchSizes = async () => {
         try { setLoading(true); const res = await sizesAPI.getAll(); setSizes(res.data); }
-        catch (err) { toast.error('Failed to load sizes'); }
+        catch (err) { toast.error(getErrorMessage(err, 'Failed to load sizes')); }
         finally { setLoading(false); }
     };
 
@@ -64,14 +65,14 @@ const Sizes = () => {
             }
             setDialogOpen(false);
             fetchSizes();
-        } catch (err) { toast.error('Failed to save size'); }
+        } catch (err) { toast.error(getErrorMessage(err, 'Failed to save size')); }
         finally { setSubmitting(false); }
     };
 
     const handleDelete = async () => {
         if (!deleteTarget) return;
         try { await sizesAPI.delete(deleteTarget); toast.success('Size deleted'); fetchSizes(); }
-        catch (err) { toast.error('Failed to delete size'); }
+        catch (err) { toast.error(getErrorMessage(err, 'Failed to delete size')); }
         finally { setDeleteTarget(null); }
     };
 

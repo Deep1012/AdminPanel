@@ -117,7 +117,6 @@ export const dashboardAPI = {
     getPrintingStockList: () => api.get('/dashboard/printing-stock-list'),
     getFinishedGoodsList: () => api.get('/dashboard/finished-goods-list'),
     getProductionTrend: (period = 'monthly') => api.get(`/dashboard/production-trend?period=${period}`),
-    getDispatchDistribution: () => api.get('/dashboard/dispatch-distribution'),
     getRecentActivity: () => api.get('/dashboard/recent-activity'),
     getPOSummary: () => api.get('/dashboard/po-summary'),
     getExportAll: () => api.get('/dashboard/export-all'),

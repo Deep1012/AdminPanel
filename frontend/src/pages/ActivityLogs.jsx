@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -6,6 +6,7 @@ import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Badge } from '../components/ui/badge';
 import { adminAPI } from '../lib/api';
+import { getErrorMessage } from '../lib/errors';
 import { formatNumber } from '../lib/utils';
 import { Activity, Loader2, AlertCircle, ChevronLeft, ChevronRight, LogIn, Plus, Pencil, Trash2, Download, Upload, Database, Eraser } from 'lucide-react';
 import { toast } from 'sonner';
@@ -51,33 +52,45 @@ const ActivityLogs = () => {
     const [filterDateFrom, setFilterDateFrom] = useState('');
     const [filterDateTo, setFilterDateTo] = useState('');
 
-    const fetchLogs = useCallback(async () => {
-        try {
-            setLoading(true);
-            const params = { page, limit };
-            if (filterAction) params.action = filterAction;
-            if (filterEntity) params.entity_type = filterEntity;
-            if (filterUsername) params.username = filterUsername;
-            if (filterDateFrom) params.from = filterDateFrom;
-            if (filterDateTo) params.to = filterDateTo;
+    // Filters change fast (the username box is free text), so several requests
+    // can be in flight at once. The ignore flag drops any response that is no
+    // longer for the current filter set.
+    useEffect(() => {
+        let ignore = false;
+        const fetchLogs = async () => {
+            try {
+                setLoading(true);
+                const params = { page, limit };
+                if (filterAction) params.action = filterAction;
+                if (filterEntity) params.entity_type = filterEntity;
+                if (filterUsername) params.username = filterUsername;
+                if (filterDateFrom) params.from = filterDateFrom;
+                if (filterDateTo) params.to = filterDateTo;
 
-            const res = await adminAPI.getActivityLogs(params);
-            setLogs(res.data.logs);
-            setTotal(res.data.total);
-            setTotalPages(res.data.totalPages);
-        } catch (err) { toast.error('Failed to load activity logs'); }
-        finally { setLoading(false); }
+                const res = await adminAPI.getActivityLogs(params);
+                if (ignore) return;
+                setLogs(res.data.logs);
+                setTotal(res.data.total);
+                setTotalPages(res.data.totalPages);
+            } catch (err) {
+                if (!ignore) toast.error(getErrorMessage(err, 'Failed to load activity logs'));
+            }
+            finally { if (!ignore) setLoading(false); }
+        };
+        fetchLogs();
+        return () => { ignore = true; };
     }, [page, filterAction, filterEntity, filterUsername, filterDateFrom, filterDateTo]);
 
-    const fetchStats = useCallback(async () => {
-        try {
-            const res = await adminAPI.getActivityLogStats();
-            setStats(res.data);
-        } catch { /* ignore */ }
+    useEffect(() => {
+        let ignore = false;
+        (async () => {
+            try {
+                const res = await adminAPI.getActivityLogStats();
+                if (!ignore) setStats(res.data);
+            } catch { /* ignore */ }
+        })();
+        return () => { ignore = true; };
     }, []);
-
-    useEffect(() => { fetchLogs(); }, [fetchLogs]);
-    useEffect(() => { fetchStats(); }, [fetchStats]);
 
     const clearFilters = () => {
         setFilterAction(''); setFilterEntity(''); setFilterUsername('');

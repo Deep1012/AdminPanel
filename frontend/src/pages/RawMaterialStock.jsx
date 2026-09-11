@@ -10,6 +10,7 @@ import { formatNumber, formatDate } from '../lib/utils';
 import { Loader2, AlertCircle, Download, Layers, List } from 'lucide-react';
 import { toast } from 'sonner';
 import { exportToExcel } from '../lib/exportToExcel';
+import { getErrorMessage } from '../lib/errors';
 
 const AGGREGATED_EXPORT_COLUMNS = [
     { header: 'Size', key: 'size' },
@@ -76,7 +77,7 @@ const RawMaterialStock = () => {
                 setIndividualData(data.individual || []);
                 setGauges(data.gauges || []);
             }
-        } catch (err) { toast.error('Failed to load stock data'); }
+        } catch (err) { toast.error(getErrorMessage(err, 'Failed to load stock data')); }
         finally { setLoading(false); }
     };
 

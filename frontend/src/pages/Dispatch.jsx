@@ -20,6 +20,7 @@ import { Plus, Trash2, Pencil, Truck, Loader2, AlertCircle, Download } from 'luc
 import { toast } from 'sonner';
 import { exportToExcel } from '../lib/exportToExcel';
 import ImportExcelButton from '../components/ImportExcelButton';
+import { getErrorMessage } from '../lib/errors';
 
 const DISPATCH_EXPORT_COLUMNS = [
     { header: 'Date', key: 'dispatch_date', transform: (v) => formatDate(v) },
@@ -106,7 +107,7 @@ const Dispatch = () => {
                 dispatchAPI.getAll(), brandsAPI.getAll(), sizesAPI.getAll(), customersAPI.getAll()
             ]);
             setDispatches(dispatchRes.data); setBrands(brandsRes.data); setSizes(sizesRes.data); setCustomers(customersRes.data);
-        } catch (err) { toast.error('Failed to load data'); }
+        } catch (err) { toast.error(getErrorMessage(err, 'Failed to load data')); }
         finally { setLoading(false); }
     };
 
@@ -163,14 +164,14 @@ const Dispatch = () => {
             if (editingId) { await dispatchAPI.update(editingId, payload); toast.success('Dispatch updated'); }
             else { await dispatchAPI.create(payload); toast.success('Dispatch created'); }
             setDialogOpen(false); resetForm(); fetchData();
-        } catch (err) { toast.error(err.response?.data?.detail || 'Failed to save dispatch'); }
+        } catch (err) { toast.error(getErrorMessage(err, 'Failed to save dispatch')); }
         finally { setSubmitting(false); }
     };
 
     const handleDelete = async () => {
         if (!deleteTarget) return;
         try { await dispatchAPI.delete(deleteTarget); toast.success('Dispatch deleted'); fetchData(); }
-        catch (err) { toast.error('Failed to delete'); }
+        catch (err) { toast.error(getErrorMessage(err, 'Failed to delete')); }
         finally { setDeleteTarget(null); }
     };
 

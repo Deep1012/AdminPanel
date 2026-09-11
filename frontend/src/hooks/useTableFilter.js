@@ -2,6 +2,27 @@ import { useMemo } from 'react';
 import { useDebounce } from './useDebounce';
 
 /**
+ * Reduce a date value to the UTC timestamp of midnight on its calendar day.
+ *
+ * Date-range inputs give us "YYYY-MM-DD", which `new Date()` reads as UTC
+ * midnight, while records carry full ISO timestamps (imports are pinned to noon
+ * UTC by `parseImportDate`). Comparing those with local-time accessors like
+ * `setHours` shifted the effective day boundary by the viewer's UTC offset, so
+ * boundary-day records appeared or vanished depending on the browser timezone.
+ * Collapsing both sides to a UTC calendar day makes the comparison
+ * timezone-independent — same approach as `parseImportDate` in lib/utils.
+ *
+ * @param {string|number|Date} value
+ * @returns {number|null} Epoch ms of UTC midnight, or null if unparseable
+ */
+function utcDayStart(value) {
+    if (value === null || value === undefined || value === '') return null;
+    const d = value instanceof Date ? value : new Date(value);
+    if (isNaN(d.getTime())) return null;
+    return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+}
+
+/**
  * Client-side table filtering hook.
  *
  * @param {Object} options
@@ -35,18 +56,18 @@ export function useTableFilter({ data = [], searchTerm = '', searchFields = [], 
             if (filter.type === 'exact') {
                 result = result.filter(item => item[filter.key] === filter.value);
             } else if (filter.type === 'dateFrom') {
-                const from = new Date(filter.value);
-                from.setHours(0, 0, 0, 0);
+                const from = utcDayStart(filter.value);
+                if (from === null) continue;
                 result = result.filter(item => {
-                    const d = new Date(item[filter.key]);
-                    return d >= from;
+                    const d = utcDayStart(item[filter.key]);
+                    return d !== null && d >= from;
                 });
             } else if (filter.type === 'dateTo') {
-                const to = new Date(filter.value);
-                to.setHours(23, 59, 59, 999);
+                const to = utcDayStart(filter.value);
+                if (to === null) continue;
                 result = result.filter(item => {
-                    const d = new Date(item[filter.key]);
-                    return d <= to;
+                    const d = utcDayStart(item[filter.key]);
+                    return d !== null && d <= to;
                 });
             }
         }

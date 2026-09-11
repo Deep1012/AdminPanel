@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
@@ -17,6 +17,7 @@ import {
     AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import { toast } from 'sonner';
+import { getErrorMessage } from '../lib/errors';
 
 const ACTIVITY_ICONS = {
     purchase: ShoppingCart,
@@ -45,29 +46,39 @@ const Dashboard = () => {
     const [loading, setLoading] = useState(true);
     const [selectedDate, setSelectedDate] = useState('');
 
-    const fetchTrend = useCallback(async (period) => {
-        try {
-            const res = await dashboardAPI.getProductionTrend(period);
-            setProductionTrend(res.data);
-        } catch {
-            // keep existing data
-        }
-    }, []);
-
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => { fetchData(); }, []);
 
-    useEffect(() => { fetchTrend(trendPeriod); }, [trendPeriod, fetchTrend]);
+    // Switching periods quickly leaves several requests in flight; without the
+    // ignore flag a slow earlier response can land last and overwrite the
+    // period the user is actually looking at.
+    useEffect(() => {
+        let ignore = false;
+        (async () => {
+            try {
+                const res = await dashboardAPI.getProductionTrend(trendPeriod);
+                if (!ignore) setProductionTrend(res.data);
+            } catch {
+                // keep existing data
+            }
+        })();
+        return () => { ignore = true; };
+    }, [trendPeriod]);
 
     const isFirstRender = React.useRef(true);
     useEffect(() => {
         if (isFirstRender.current) { isFirstRender.current = false; return; }
+        // Same race: change the date twice quickly and the first response may
+        // resolve last, silently showing numbers for the wrong day.
+        let ignore = false;
         const fetchDateStats = async () => {
             try {
                 const res = await dashboardAPI.getStats(selectedDate || undefined);
-                setStats(res.data);
+                if (!ignore) setStats(res.data);
             } catch { /* keep existing */ }
         };
         fetchDateStats();
+        return () => { ignore = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedDate]);
 
@@ -88,7 +99,7 @@ const Dashboard = () => {
             if (results[3].status === 'fulfilled') setRecentActivity(results[3].value.data);
             if (results[4].status === 'fulfilled') setPOSummary(results[4].value.data);
         } catch (err) {
-            toast.error('Failed to load dashboard');
+            toast.error(getErrorMessage(err, 'Failed to load dashboard'));
         } finally {
             setLoading(false);
         }

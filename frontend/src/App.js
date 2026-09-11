@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Toaster } from './components/ui/sonner';
+import ErrorBoundary from './components/ErrorBoundary';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -154,14 +155,16 @@ function AppRoutes() {
 
 function App() {
     return (
-        <BrowserRouter>
-            <AuthProvider>
-                <div className="App dark">
-                    <AppRoutes />
-                    <Toaster position="bottom-right" richColors />
-                </div>
-            </AuthProvider>
-        </BrowserRouter>
+        <ErrorBoundary>
+            <BrowserRouter>
+                <AuthProvider>
+                    <div className="App dark">
+                        <AppRoutes />
+                        <Toaster position="bottom-right" richColors />
+                    </div>
+                </AuthProvider>
+            </BrowserRouter>
+        </ErrorBoundary>
     );
 }
 

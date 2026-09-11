@@ -10,6 +10,7 @@ import { formatNumber } from '../lib/utils';
 import { Loader2, AlertCircle, Download, Printer } from 'lucide-react';
 import { toast } from 'sonner';
 import { exportToExcel } from '../lib/exportToExcel';
+import { getErrorMessage } from '../lib/errors';
 
 const EXPORT_COLUMNS = [
     { header: 'Size', key: 'size_name' },
@@ -37,7 +38,7 @@ const PrintingStock = () => {
             setLoading(true);
             const res = await dashboardAPI.getPrintingStockList();
             setStockData(res.data);
-        } catch (err) { toast.error('Failed to load printing stock'); }
+        } catch (err) { toast.error(getErrorMessage(err, 'Failed to load printing stock')); }
         finally { setLoading(false); }
     };
 

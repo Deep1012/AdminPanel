@@ -12,6 +12,7 @@ import { menuItemsAPI } from '../lib/api';
 import { getIcon, AVAILABLE_ICONS } from '../lib/iconMap';
 import { Plus, Trash2, Pencil, Loader2, AlertCircle, ArrowUp, ArrowDown, Menu, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
+import { getErrorMessage } from '../lib/errors';
 
 const emptyForm = { label: '', path: '', icon: 'Package', admin_only: false };
 
@@ -33,7 +34,7 @@ const MenuManagement = () => {
             const res = await menuItemsAPI.getAll();
             setItems(res.data);
             setReordered(false);
-        } catch (err) { toast.error('Failed to load menu items'); }
+        } catch (err) { toast.error(getErrorMessage(err, 'Failed to load menu items')); }
         finally { setLoading(false); }
     };
 
@@ -58,14 +59,14 @@ const MenuManagement = () => {
                 toast.success('Menu item created');
             }
             setDialogOpen(false); fetchData();
-        } catch (err) { toast.error(err.response?.data?.detail || 'Failed to save menu item'); }
+        } catch (err) { toast.error(getErrorMessage(err, 'Failed to save menu item')); }
         finally { setSubmitting(false); }
     };
 
     const handleDelete = async () => {
         if (!deleteTarget) return;
         try { await menuItemsAPI.delete(deleteTarget); toast.success('Menu item deleted'); fetchData(); }
-        catch (err) { toast.error(err.response?.data?.detail || 'Failed to delete'); }
+        catch (err) { toast.error(getErrorMessage(err, 'Failed to delete')); }
         finally { setDeleteTarget(null); }
     };
 
@@ -88,7 +89,7 @@ const MenuManagement = () => {
             toast.success('Menu order saved');
             setReordered(false);
             fetchData();
-        } catch (err) { toast.error('Failed to save order'); }
+        } catch (err) { toast.error(getErrorMessage(err, 'Failed to save order')); }
     };
 
     const handleSeedDefaults = async () => {
@@ -96,7 +97,7 @@ const MenuManagement = () => {
             const res = await menuItemsAPI.seedDefaults();
             toast.success(res.data.message);
             fetchData();
-        } catch (err) { toast.error(err.response?.data?.detail || 'Failed to seed defaults'); }
+        } catch (err) { toast.error(getErrorMessage(err, 'Failed to seed defaults')); }
     };
 
     if (loading) return <div className="flex items-center justify-center h-64"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;

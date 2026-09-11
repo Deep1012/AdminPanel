@@ -10,9 +10,21 @@ export const AuthProvider = ({ children }) => {
     useEffect(() => {
         const token = localStorage.getItem('token');
         const storedUser = localStorage.getItem('user');
-        
+
+        // A corrupted `user` entry (extension, manual edit, partial write, or a
+        // stale shape from an older release) must never throw here — an
+        // unguarded parse would white-screen the app on every load with no way
+        // out but clearing site data by hand. Treat it as logged out instead.
+        let parsed = null;
         if (token && storedUser) {
-            const parsed = JSON.parse(storedUser);
+            try {
+                parsed = JSON.parse(storedUser);
+            } catch {
+                parsed = null;
+            }
+        }
+
+        if (token && parsed) {
             setUser(parsed);
             setLoading(false);
             // Verify token in background (don't block UI)
@@ -25,6 +37,8 @@ export const AuthProvider = ({ children }) => {
                     logout();
                 });
         } else {
+            // Clear any half-written / unreadable session so the next load is clean.
+            if (storedUser || token) logout();
             setLoading(false);
         }
     }, []);

@@ -4,6 +4,7 @@ import { Progress } from './ui/progress';
 import { Upload, FileDown, Loader2, CheckCircle2, XCircle, X } from 'lucide-react';
 import { importFromExcel, downloadTemplate } from '../lib/importFromExcel';
 import { toast } from 'sonner';
+import { getErrorMessage } from '../lib/errors';
 
 /**
  * Reusable Import Excel button with template download and non-blocking progress bar.
@@ -50,7 +51,7 @@ const ImportExcelButton = ({ columns, templateName, onImport }) => {
             if (importResult.success > 0) toast.success(`Imported ${importResult.success} record(s)`);
             if (importResult.failed > 0) toast.error(`${importResult.failed} record(s) failed to import`);
         } catch (err) {
-            toast.error(err.message || 'Import failed');
+            toast.error(getErrorMessage(err, err.message || 'Import failed'));
             setImporting(false);
         } finally {
             if (fileRef.current) fileRef.current.value = '';

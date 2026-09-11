@@ -17,6 +17,7 @@ import { Plus, Trash2, Pencil, ShoppingCart, Loader2, AlertCircle, Layers, Downl
 import { toast } from 'sonner';
 import { exportToExcel } from '../lib/exportToExcel';
 import ImportExcelButton from '../components/ImportExcelButton';
+import { getErrorMessage } from '../lib/errors';
 
 const PURCHASE_EXPORT_COLUMNS = [
     { header: 'Date', key: 'purchase_date', transform: (v) => formatDate(v) },
@@ -76,7 +77,7 @@ const Purchase = () => {
 
     const fetchPurchases = async () => {
         try { setLoading(true); const res = await purchaseAPI.getAll(); setPurchases(res.data); }
-        catch (err) { toast.error('Failed to load purchases'); }
+        catch (err) { toast.error(getErrorMessage(err, 'Failed to load purchases')); }
         finally { setLoading(false); }
     };
 
@@ -116,14 +117,14 @@ const Purchase = () => {
             if (editingId) { await purchaseAPI.update(editingId, payload); toast.success('Entry updated'); }
             else { await purchaseAPI.create(payload); toast.success('Entry added'); }
             setDialogOpen(false); fetchPurchases();
-        } catch (err) { toast.error('Failed to save entry'); }
+        } catch (err) { toast.error(getErrorMessage(err, 'Failed to save entry')); }
         finally { setSubmitting(false); }
     };
 
     const handleDelete = async () => {
         if (!deleteTarget) return;
         try { await purchaseAPI.delete(deleteTarget); toast.success('Entry deleted'); fetchPurchases(); }
-        catch (err) { toast.error('Failed to delete'); }
+        catch (err) { toast.error(getErrorMessage(err, 'Failed to delete')); }
         finally { setDeleteTarget(null); }
     };
 

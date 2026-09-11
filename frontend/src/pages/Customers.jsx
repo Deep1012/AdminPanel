@@ -16,6 +16,7 @@ import { Plus, Trash2, Pencil, Users, Loader2, AlertCircle, Download } from 'luc
 import { toast } from 'sonner';
 import { exportToExcel } from '../lib/exportToExcel';
 import ImportExcelButton from '../components/ImportExcelButton';
+import { getErrorMessage } from '../lib/errors';
 
 const CUSTOMERS_EXPORT_COLUMNS = [
     { header: '#', key: 'id', transform: (v, row, idx) => idx + 1 },
@@ -43,7 +44,7 @@ const Customers = () => {
 
     const fetchCustomers = async () => {
         try { setLoading(true); const res = await customersAPI.getAll(); setCustomers(res.data); }
-        catch (err) { toast.error('Failed to load customers'); }
+        catch (err) { toast.error(getErrorMessage(err, 'Failed to load customers')); }
         finally { setLoading(false); }
     };
 
@@ -64,14 +65,14 @@ const Customers = () => {
             }
             setDialogOpen(false);
             fetchCustomers();
-        } catch (err) { toast.error(err.response?.data?.detail || 'Failed to save customer'); }
+        } catch (err) { toast.error(getErrorMessage(err, 'Failed to save customer')); }
         finally { setSubmitting(false); }
     };
 
     const handleDelete = async () => {
         if (!deleteTarget) return;
         try { await customersAPI.delete(deleteTarget); toast.success('Customer deleted'); fetchCustomers(); }
-        catch (err) { toast.error('Failed to delete customer'); }
+        catch (err) { toast.error(getErrorMessage(err, 'Failed to delete customer')); }
         finally { setDeleteTarget(null); }
     };
 

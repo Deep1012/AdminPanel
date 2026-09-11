@@ -17,6 +17,7 @@ import { Plus, Trash2, Pencil, Tag, Loader2, AlertCircle, Download } from 'lucid
 import { toast } from 'sonner';
 import { exportToExcel } from '../lib/exportToExcel';
 import ImportExcelButton from '../components/ImportExcelButton';
+import { getErrorMessage } from '../lib/errors';
 
 const BRANDS_EXPORT_COLUMNS = [
     { header: '#', key: 'id', transform: (v, row, idx) => idx + 1 },
@@ -44,7 +45,7 @@ const Brands = () => {
 
     const fetchBrands = async () => {
         try { setLoading(true); const res = await brandsAPI.getAll(); setBrands(res.data); }
-        catch (err) { toast.error('Failed to load brands'); }
+        catch (err) { toast.error(getErrorMessage(err, 'Failed to load brands')); }
         finally { setLoading(false); }
     };
 
@@ -65,14 +66,14 @@ const Brands = () => {
             }
             setDialogOpen(false);
             fetchBrands();
-        } catch (err) { toast.error('Failed to save brand'); }
+        } catch (err) { toast.error(getErrorMessage(err, 'Failed to save brand')); }
         finally { setSubmitting(false); }
     };
 
     const handleDelete = async () => {
         if (!deleteTarget) return;
         try { await brandsAPI.delete(deleteTarget); toast.success('Brand deleted'); fetchBrands(); }
-        catch (err) { toast.error('Failed to delete brand'); }
+        catch (err) { toast.error(getErrorMessage(err, 'Failed to delete brand')); }
         finally { setDeleteTarget(null); }
     };
 
@@ -164,7 +165,7 @@ const Brands = () => {
                                             <td>
                                                 <Switch checked={brand.is_lwbf || false} onCheckedChange={async (v) => {
                                                     try { await brandsAPI.update(brand.id, { is_lwbf: v }); fetchBrands(); }
-                                                    catch { toast.error('Failed to update'); }
+                                                    catch (err) { toast.error(getErrorMessage(err, 'Failed to update')); }
                                                 }} />
                                             </td>
                                             <td className="text-muted-foreground">{formatDate(brand.created_at)}</td>

@@ -19,6 +19,7 @@ import {
     ChevronLeft, ChevronRight, ChevronDown, Download, Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { getErrorMessage } from '../lib/errors';
 
 // Fallback if API fails or menu items not yet seeded
 const FALLBACK_NAV_ITEMS = [
@@ -132,7 +133,7 @@ export const Layout = ({ children }) => {
             }
             toast.success(`Exported ${count} file(s) successfully`);
         } catch (err) {
-            toast.error('Failed to export data');
+            toast.error(getErrorMessage(err, 'Failed to export data'));
         } finally {
             setExporting(false);
         }

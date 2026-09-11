@@ -16,6 +16,7 @@ import { useTableSort } from '../hooks/useTableSort';
 import { purchaseOrdersAPI, brandsAPI, sizesAPI, customersAPI } from '../lib/api';
 import SearchableSelect from '../components/SearchableSelect';
 import { formatDate, formatNumber, parseImportDate } from '../lib/utils';
+import { getErrorMessage } from '../lib/errors';
 import { Plus, Trash2, Pencil, ClipboardList, Loader2, AlertCircle, Download, Check, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 import { exportToExcel } from '../lib/exportToExcel';
@@ -98,7 +99,7 @@ const PurchaseOrders = () => {
                 purchaseOrdersAPI.getAll(), brandsAPI.getAll(), sizesAPI.getAll(), customersAPI.getAll()
             ]);
             setOrders(ordersRes.data); setBrands(brandsRes.data); setSizes(sizesRes.data); setCustomers(customersRes.data);
-        } catch (err) { toast.error('Failed to load data'); }
+        } catch (err) { toast.error(getErrorMessage(err, 'Failed to load data')); }
         finally { setLoading(false); }
     };
 
@@ -140,19 +141,49 @@ const PurchaseOrders = () => {
         if (!formCompany || formItems.length === 0) { toast.error('Please select customer and add at least one item'); return; }
         setSubmitting(true);
         try {
+            // Each item is its own POST, so a mid-loop failure used to leave the
+            // earlier items already persisted while the dialog still held all
+            // of them — retrying then duplicated those. Isolate each item,
+            // keep only the failures in the form, and report both counts.
+            //
+            // Requests stay sequential on purpose: the backend derives
+            // `serial_no` by reading the latest PO and incrementing, guarded
+            // only by a unique index, so firing these concurrently would
+            // produce spurious 409 "Duplicate serial number" failures.
+            // Matches the per-row loop in ImportExcelButton.
+            const failedItems = [];
+            let succeeded = 0;
+            let firstError = null;
+
             for (const item of formItems) {
-                await purchaseOrdersAPI.create({
-                    date: new Date(formDate).toISOString(),
-                    company_name: formCompany,
-                    brand_id: item.brand_id, brand_name: item.brand_name,
-                    size_id: item.size_id, size_name: item.size_name,
-                    quantity: item.quantity,
-                });
+                try {
+                    await purchaseOrdersAPI.create({
+                        date: new Date(formDate).toISOString(),
+                        company_name: formCompany,
+                        brand_id: item.brand_id, brand_name: item.brand_name,
+                        size_id: item.size_id, size_name: item.size_name,
+                        quantity: item.quantity,
+                    });
+                    succeeded += 1;
+                } catch (err) {
+                    failedItems.push(item);
+                    if (!firstError) firstError = err;
+                }
             }
-            toast.success(`${formItems.length} purchase order(s) created`);
-            setDialogOpen(false); resetForm(); fetchData();
-        } catch (err) { toast.error(err.response?.data?.detail || 'Failed to create orders'); }
-        finally { setSubmitting(false); }
+
+            const failed = failedItems.length;
+            if (succeeded > 0) toast.success(`${succeeded} purchase order(s) created`);
+            if (failed > 0) toast.error(`${failed} purchase order(s) failed: ${getErrorMessage(firstError, 'Failed to create orders')}`);
+
+            fetchData();
+            if (failed === 0) {
+                setDialogOpen(false);
+                resetForm();
+            } else {
+                // Leave the dialog open with only the items still to be created.
+                setFormItems(failedItems);
+            }
+        } finally { setSubmitting(false); }
     };
 
     const handleSubmitEdit = async (e) => {
@@ -174,14 +205,14 @@ const PurchaseOrders = () => {
             });
             toast.success('Order updated');
             setDialogOpen(false); fetchData();
-        } catch (err) { toast.error(err.response?.data?.detail || 'Failed to save order'); }
+        } catch (err) { toast.error(getErrorMessage(err, 'Failed to save order')); }
         finally { setSubmitting(false); }
     };
 
     const handleDelete = async () => {
         if (!deleteTarget) return;
         try { await purchaseOrdersAPI.delete(deleteTarget); toast.success('Order deleted'); fetchData(); }
-        catch (err) { toast.error('Failed to delete'); }
+        catch (err) { toast.error(getErrorMessage(err, 'Failed to delete')); }
         finally { setDeleteTarget(null); }
     };
 
@@ -190,7 +221,7 @@ const PurchaseOrders = () => {
             await purchaseOrdersAPI.toggleComplete(po.id);
             toast.success(po.is_completed ? 'Order reopened' : 'Order marked as completed');
             fetchData();
-        } catch (err) { toast.error('Failed to update status'); }
+        } catch (err) { toast.error(getErrorMessage(err, 'Failed to update status')); }
     };
 
     const clearFilters = () => { setSearchTerm(''); setDateFrom(''); setDateTo(''); setFilterCompany(''); };
