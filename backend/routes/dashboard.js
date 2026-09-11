@@ -5,6 +5,20 @@ const Dispatch = require("../models/Dispatch");
 const Purchase = require("../models/Purchase");
 const PurchaseOrder = require("../models/PurchaseOrder");
 const { authenticate } = require("../middleware/auth");
+// The four CLAUDE.md formulas had ~8 copies across this file. They are
+// identical substitutions (same arithmetic, with non-numeric values coerced to
+// 0 instead of being concatenated), so no displayed figure changes. The
+// per-(size, brand) bucket builders in lib/availability.js are deliberately
+// NOT used here: they include buckets seen only in production or only in
+// dispatch, which would add rows to /printing-stock-list and
+// /finished-goods-list. Revealing that drift is a UI decision, not a
+// de-duplication one.
+const {
+  sheetsAvailable,
+  printingStock,
+  availablePrintingStock,
+  finishedGoodsAvailable,
+} = require("../lib/stock");
 
 const router = express.Router();
 
@@ -20,13 +34,13 @@ router.get("/stats", authenticate, async (req, res) => {
     ]);
 
     const total_sheets = purchases.reduce((sum, p) => sum + (p.no_of_sheets || 0), 0);
-    const total_sheets_available = purchases.reduce((sum, p) => sum + ((p.no_of_sheets || 0) - (p.sheets_used || 0)), 0);
+    const total_sheets_available = purchases.reduce((sum, p) => sum + sheetsAvailable(p), 0);
     const total_weight = purchases.reduce((sum, p) => sum + (p.weight || 0), 0);
 
     const total_jobs = printingJobs.length;
     let total_printing_stock = 0;
     for (const job of printingJobs) {
-      total_printing_stock += (job.total_bodies || 0) * (job.sheets_from_material || 0);
+      total_printing_stock += printingStock(job);
     }
     const total_printing_used = production.reduce((sum, p) => sum + (p.printing_stock_used || 0), 0);
 
@@ -90,8 +104,8 @@ router.get("/stats", authenticate, async (req, res) => {
 
     res.json({
       purchase: { total_sheets, total_sheets_available, total_weight, total_items: purchases.length },
-      printing_coating: { total_printing_stock, printing_stock_available: total_printing_stock - total_printing_used, total_jobs },
-      finished_goods: { total_produced: total_finished_goods, available_stock: total_finished_goods - total_dispatched },
+      printing_coating: { total_printing_stock, printing_stock_available: availablePrintingStock(total_printing_stock, total_printing_used), total_jobs },
+      finished_goods: { total_produced: total_finished_goods, available_stock: finishedGoodsAvailable(total_finished_goods, total_dispatched) },
       dispatch: { total_dispatched, total_items: dispatches.length },
       purchase_orders: { total: purchaseOrders.length, total_quantity: po_total_quantity },
       trends,
@@ -118,7 +132,7 @@ router.get("/purchase-stock", authenticate, async (req, res) => {
       }
       stockMap[sizeKey].total_sheets += p.no_of_sheets || 0;
       stockMap[sizeKey].sheets_used += p.sheets_used || 0;
-      stockMap[sizeKey].sheets_available += (p.no_of_sheets || 0) - (p.sheets_used || 0);
+      stockMap[sizeKey].sheets_available += sheetsAvailable(p);
       stockMap[sizeKey].total_weight += p.weight || 0;
     }
 
@@ -134,7 +148,7 @@ router.get("/purchase-stock", authenticate, async (req, res) => {
       weight: p.weight || 0,
       total_sheets: p.no_of_sheets || 0,
       sheets_used: p.sheets_used || 0,
-      sheets_available: (p.no_of_sheets || 0) - (p.sheets_used || 0),
+      sheets_available: sheetsAvailable(p),
       supplier: p.supplier || '-',
       purchase_date: p.purchase_date,
     }));
@@ -268,7 +282,7 @@ router.get("/printing-stock-list", authenticate, async (req, res) => {
           const sheets = brand.sheets_used || jobSheets;
           const key = `${sizeName}_${brand.brand_name}`;
           if (!stockMap[key]) stockMap[key] = { size_name: sizeName, brand_name: brand.brand_name, printing_done: 0, used_in_production: 0, available: 0 };
-          stockMap[key].printing_done += (brand.bodies_count || 0) * sheets;
+          stockMap[key].printing_done += printingStock({ total_bodies: brand.bodies_count, sheets_from_material: sheets });
         }
       }
     }
@@ -276,7 +290,7 @@ router.get("/printing-stock-list", authenticate, async (req, res) => {
       const key = `${p.size_name || ""}_${p.brand_name || ""}`;
       if (stockMap[key]) stockMap[key].used_in_production += p.printing_stock_used || 0;
     }
-    for (const key of Object.keys(stockMap)) stockMap[key].available = stockMap[key].printing_done - stockMap[key].used_in_production;
+    for (const key of Object.keys(stockMap)) stockMap[key].available = availablePrintingStock(stockMap[key].printing_done, stockMap[key].used_in_production);
     res.json(Object.values(stockMap));
   } catch (error) {
     res.status(500).json({ detail: error.message });
@@ -303,7 +317,7 @@ router.get("/finished-goods-list", authenticate, async (req, res) => {
         if (stockMap[key]) stockMap[key].dispatched += item.quantity || 0;
       }
     }
-    for (const key of Object.keys(stockMap)) stockMap[key].available = stockMap[key].produced - stockMap[key].dispatched;
+    for (const key of Object.keys(stockMap)) stockMap[key].available = finishedGoodsAvailable(stockMap[key].produced, stockMap[key].dispatched);
     res.json(Object.values(stockMap));
   } catch (error) {
     res.status(500).json({ detail: error.message });

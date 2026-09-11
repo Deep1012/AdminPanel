@@ -1,9 +1,12 @@
 const express = require("express");
 const { v4: uuidv4 } = require("uuid");
 const Production = require("../models/Production");
+const PrintingJob = require("../models/PrintingJob");
 const Brand = require("../models/Brand");
 const { authenticate } = require("../middleware/auth");
 const { logActivity } = require("../lib/activityLogger");
+const { printingAvailability, availableFor } = require("../lib/availability");
+const { toNumber } = require("../lib/stock");
 
 const CASCADING_BRAND_NAMES = ["BOTTOM", "TOP", "LID"];
 const LWBF_CASCADING_BRAND_NAMES = ["BOTTOM LWBF", "LID LWBF"];
@@ -16,6 +19,51 @@ router.post("/", authenticate, async (req, res) => {
     const { brand_id, brand_name, size_id, size_name, quantity_produced, printing_stock_used = 0, printing_job_id, notes, production_date } = req.body;
     const id = uuidv4();
     const now = production_date || new Date().toISOString();
+
+    // ---- Available Printing Stock guard -----------------------------------
+    // Available Printing Stock = Printing Done - Used in Production, per
+    // (size, brand). Until now this route checked nothing, so an entry could
+    // declare 1000 printing stock used against a brand/size that had none
+    // printed, and then cascade that number to BOTTOM/TOP/LID as well.
+    //
+    // SCOPE, DELIBERATE: only the requested brand/size is checked. The cascade
+    // children write against their own brand keys (BOTTOM/TOP/LID and the LWBF
+    // pair) and are NOT availability-checked here — requiring printed stock for
+    // all four brands before any production could be recorded would reject the
+    // normal shop-floor flow, which is a bigger change than this phase should
+    // make. Their consumption is still reported by GET /api/admin/reconcile.
+    //
+    // CASCADE ROWS ARE COUNTED IN THE AGGREGATE, DELIBERATE: the
+    // used_in_production side includes rows with a non-null
+    // parent_production_id. They never land in the source brand's bucket (they
+    // carry their own brand_name), so there is nothing to double-count;
+    // excluding them would understate consumption of the cascade brands' own
+    // buckets and let those be drawn down without limit. See lib/availability.js.
+    //
+    // TWO LIMITS, BOTH KNOWN:
+    //  - It guards the DECLARED consumption. An entry sending
+    //    printing_stock_used = 0 (the Excel import path does when the column is
+    //    blank) consumes nothing by its own account and is not blocked, even
+    //    though it still records finished goods.
+    //  - It is a read-then-write check, not an atomic one. Unlike sheets and
+    //    quantity_dispatched, available printing stock is an aggregate over two
+    //    collections with no counter document to guard, so two simultaneous
+    //    entries can both pass. Making it atomic needs a stored per-(size,
+    //    brand) counter, which is a schema change for a later phase.
+    const stockUsed = toNumber(printing_stock_used);
+    if (stockUsed > 0) {
+      const [jobs, productions] = await Promise.all([
+        PrintingJob.find({}, { sizes: 1, sheets_from_material: 1, _id: 0 }).lean(),
+        Production.find({}, { size_name: 1, brand_name: 1, printing_stock_used: 1, _id: 0 }).lean(),
+      ]);
+
+      const available = availableFor(printingAvailability(jobs, productions), size_name, brand_name);
+      if (stockUsed > available) {
+        return res.status(400).json({
+          detail: `Printing stock used (${stockUsed}) exceeds available printing stock (${available}) for ${brand_name} ${size_name}`,
+        });
+      }
+    }
 
     const entry = await Production.create({
       id,
@@ -107,6 +155,12 @@ router.get("/", authenticate, async (req, res) => {
   }
 });
 
+// KNOWN GAP: this handler does not re-check Available Printing Stock when an
+// edit raises printing_stock_used. The POST guard is the one this phase adds;
+// extending it here needs the same net-delta treatment the dispatch PUT got,
+// plus a decision about what to do with the cascade children whose
+// printing_stock_used is rewritten below. GET /api/admin/reconcile surfaces
+// the resulting drift in the meantime.
 router.put("/:prodId", authenticate, async (req, res) => {
   try {
     const { brand_id, brand_name, size_id, size_name, quantity_produced, printing_stock_used, notes, production_date } = req.body;

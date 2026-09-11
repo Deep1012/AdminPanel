@@ -119,7 +119,6 @@ async function seed() {
       weight: spec.weight,
       no_of_sheets: sheets,
       sheets_used: 0,
-      sheets_available: sheets,
       supplier: suppliers[i],
       invoice_number: `INV-2026-${String(i + 1).padStart(3, "0")}`,
       purchase_date: iso(spec.date),
@@ -164,7 +163,6 @@ async function seed() {
 
     // Update purchase tracking
     purchase.sheets_used = sheetsConsumed;
-    purchase.sheets_available = 0;
 
     const brandsArr = config.brandIdx.map((bIdx, j) => ({
       brand_id: usedBrands[bIdx].id,
@@ -197,7 +195,7 @@ async function seed() {
   await PrintingJob.insertMany(jobDocs);
   // Update purchases with sheets_used
   for (const p of purchaseDocs) {
-    await Purchase.updateOne({ id: p.id }, { $set: { sheets_used: p.sheets_used, sheets_available: p.sheets_available } });
+    await Purchase.updateOne({ id: p.id }, { $set: { sheets_used: p.sheets_used } });
   }
   console.log(`  Inserted ${jobDocs.length} printing jobs`);
 

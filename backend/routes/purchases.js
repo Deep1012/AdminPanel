@@ -5,7 +5,8 @@ const PrintingJob = require("../models/PrintingJob");
 const { authenticate } = require("../middleware/auth");
 const { logActivity } = require("../lib/activityLogger");
 const { nextSequence } = require("../lib/sequence");
-const { sheetsFromWeight } = require("../lib/stock");
+const { sheetsFromWeight, sheetsAvailable } = require("../lib/stock");
+const { withComputedSheets } = require("../lib/purchaseView");
 
 const router = express.Router();
 
@@ -58,7 +59,6 @@ router.post("/", authenticate, async (req, res) => {
       weight,
       no_of_sheets,
       sheets_used: 0,
-      sheets_available: no_of_sheets,
       supplier: supplier || null,
       invoice_number: invoice_number || null,
       purchase_date: now,
@@ -67,7 +67,9 @@ router.post("/", authenticate, async (req, res) => {
 
     await logActivity({ action: "CREATE", entity_type: "purchase", entity_id: id, entity_label: sr_no, user: req.user, details: `Added raw material ${sr_no} (${weight}kg)`, ip_address: req.ip });
 
-    res.json(purchase.toObject({ versionKey: false }));
+    // Shaped through the same read-time computation as the GETs, so the
+    // response cannot disagree with the next read of the same lot.
+    res.json(withComputedSheets(purchase.toObject({ versionKey: false })));
   } catch (error) {
     res.status(500).json({ detail: error.message });
   }
@@ -76,14 +78,12 @@ router.post("/", authenticate, async (req, res) => {
 router.get("/", authenticate, async (req, res) => {
   try {
     const purchases = await Purchase.find({}, { _id: 0, __v: 0 }).sort({ purchase_date: -1 }).lean();
-    const result = purchases.map((p) => {
-      if (p.sheets_used === undefined) p.sheets_used = 0;
-      if (p.sheets_available === undefined) {
-        p.sheets_available = (p.no_of_sheets || 0) - (p.sheets_used || 0);
-      }
-      return p;
-    });
-    res.json(result);
+    // sheets_available is derived here, not read. A lean() query returns
+    // fields that are no longer in the schema, so documents written before the
+    // field was dropped would otherwise still serve their stale stored value —
+    // which is exactly the disagreement with /dashboard/purchase-stock that
+    // this replaces. withComputedSheets discards it and recomputes.
+    res.json(purchases.map(withComputedSheets));
   } catch (error) {
     res.status(500).json({ detail: error.message });
   }
@@ -99,7 +99,7 @@ router.get("/available", authenticate, async (req, res) => {
     const available = [];
     for (const p of purchases) {
       const sheets_used = p.sheets_used || 0;
-      const sheets_available = (p.no_of_sheets || 0) - sheets_used;
+      const sheets_available = sheetsAvailable(p);
       if (sheets_available > 0) {
         available.push({
           id: p.id,
@@ -156,9 +156,8 @@ router.put("/:purchaseId", authenticate, async (req, res) => {
       if (size2 !== undefined) updateData.size2 = s2;
       if (weight !== undefined) updateData.weight = w;
 
-      const no_of_sheets = sheetsFromWeight({ weight: w, gauge: g, size1: s1, size2: s2 });
-      updateData.no_of_sheets = no_of_sheets;
-      updateData.sheets_available = no_of_sheets - (existing.sheets_used || 0);
+      // Only no_of_sheets is stored; availability follows from it at read time.
+      updateData.no_of_sheets = sheetsFromWeight({ weight: w, gauge: g, size1: s1, size2: s2 });
     }
 
     const result = await Purchase.updateOne({ id: req.params.purchaseId }, { $set: updateData });

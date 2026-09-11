@@ -1,10 +1,24 @@
 const express = require("express");
 const { v4: uuidv4 } = require("uuid");
 const Dispatch = require("../models/Dispatch");
+const Production = require("../models/Production");
 const PurchaseOrder = require("../models/PurchaseOrder");
 const { authenticate } = require("../middleware/auth");
 const { logActivity } = require("../lib/activityLogger");
 const { nextSequence } = require("../lib/sequence");
+const {
+  assertPoCapacity,
+  applyPoDeltasGuarded,
+  revertPoDeltas,
+  PoSyncError,
+} = require("../lib/poSync");
+const { itemsOf, sumQuantity, poDeltasFor, netPoDeltas } = require("../lib/dispatchItems");
+const {
+  itemsFromPayload,
+  findInvalidQuantity,
+  resolvePoIds,
+  findFinishedGoodsShortage,
+} = require("../lib/dispatchRequest");
 
 const router = express.Router();
 
@@ -15,101 +29,104 @@ const ORDER_NUMBER_WIDTH = 3;
 // Normalize old single-item dispatches to have an items array
 function normalizeDispatch(doc) {
   const obj = doc.toObject ? doc.toObject({ versionKey: false }) : { ...doc };
-  if (!obj.items || obj.items.length === 0) {
-    if (obj.brand_id) {
-      obj.items = [{
-        brand_id: obj.brand_id,
-        brand_name: obj.brand_name,
-        size_id: obj.size_id,
-        size_name: obj.size_name,
-        quantity: obj.quantity,
-        purchase_order_id: obj.purchase_order_id,
-      }];
-      obj.total_quantity = obj.quantity;
-    } else {
-      obj.items = [];
-      obj.total_quantity = 0;
-    }
+  const items = itemsOf(obj);
+  return { ...obj, items, total_quantity: items.length > 0 ? sumQuantity(items) : 0 };
+}
+
+/** Translate a PoSyncError into the project's error shape; rethrow anything else. */
+function respondToPoError(res, error) {
+  if (error instanceof PoSyncError) {
+    return res.status(error.status).json({ detail: error.message });
   }
-  return obj;
+  throw error;
 }
 
 router.post("/", authenticate, async (req, res) => {
   try {
-    const { customer_name, notes, dispatch_date, items: reqItems,
-      brand_id, brand_name, size_id, size_name, quantity, purchase_order_id } = req.body;
+    const { customer_name, notes, dispatch_date } = req.body;
 
-    // Support both multi-item and legacy single-item payloads
-    let items;
-    if (reqItems && reqItems.length > 0) {
-      items = reqItems;
-    } else if (brand_id && size_id && quantity) {
-      items = [{ brand_id, brand_name, size_id, size_name, quantity, purchase_order_id: purchase_order_id || null }];
-    } else {
+    const items = itemsFromPayload(req.body);
+    if (!items) {
       return res.status(400).json({ detail: "Please provide items or brand/size/quantity" });
     }
 
-    // Phase 1: Resolve POs and validate all items before any writes
-    const resolvedItems = [];
-    for (const item of items) {
-      let resolvedPoId = item.purchase_order_id || null;
-      if (!resolvedPoId && item.brand_id && item.size_id && customer_name) {
-        const matchingPo = await PurchaseOrder.findOne({
-          brand_id: item.brand_id,
-          size_id: item.size_id,
-          company_name: customer_name,
-          $expr: { $gt: [{ $subtract: ["$quantity", { $ifNull: ["$quantity_dispatched", 0] }] }, 0] }
-        }).sort({ date: 1 }).lean();
-        if (matchingPo) resolvedPoId = matchingPo.id;
-      }
-
-      if (resolvedPoId) {
-        const po = await PurchaseOrder.findOne({ id: resolvedPoId }).lean();
-        if (!po) return res.status(404).json({ detail: `Purchase order not found for item ${item.brand_name} ${item.size_name}` });
-        const remaining = po.quantity - (po.quantity_dispatched || 0);
-        if (item.quantity > remaining) {
-          return res.status(400).json({ detail: `Dispatch qty (${item.quantity}) for ${item.brand_name} ${item.size_name} exceeds PO remaining (${remaining})` });
-        }
-      }
-
-      resolvedItems.push({ ...item, purchase_order_id: resolvedPoId });
+    const invalidItem = findInvalidQuantity(items);
+    if (invalidItem) {
+      return res.status(400).json({
+        detail: `Quantity must be greater than 0 for ${invalidItem.brand_name || "item"} ${invalidItem.size_name || ""}`.trim(),
+      });
     }
 
-    // Phase 2: All validations passed — create dispatch and sync POs
+    // Phase 1: resolve POs and validate the whole request before any write.
+    const resolvedItems = await resolvePoIds(items, customer_name, { model: PurchaseOrder });
+
+    // Deltas are AGGREGATED per PO. Validating each line on its own against
+    // the PO as it stood before the request is what let two 8-unit lines both
+    // pass against a PO with 10 remaining and then both increment it to 16.
+    const poDelta = poDeltasFor(resolvedItems, 1);
+    try {
+      await assertPoCapacity(poDelta);
+    } catch (error) {
+      return respondToPoError(res, error);
+    }
+
+    const shortage = await findFinishedGoodsShortage([], resolvedItems, {
+      productionModel: Production,
+      dispatchModel: Dispatch,
+    });
+    if (shortage) {
+      return res.status(400).json({
+        detail: `Dispatch qty (${shortage.quantity}) for ${shortage.brand_name} ${shortage.size_name} exceeds finished goods available (${shortage.available})`,
+      });
+    }
+
+    // Phase 2: PO counters move BEFORE the dispatch row exists, on purpose.
+    // Without transactions one ordering has to be wrong on failure. This one
+    // fails into a PO that looks *more* dispatched than it is: visible on the
+    // Purchase Orders page and conservative, because it refuses further
+    // dispatch. The other order fails into a PO that looks like it still has
+    // room, which is invisible and authorises a real over-dispatch.
+    // applyPoDeltasGuarded re-checks capacity inside each write, so a
+    // concurrent dispatch cannot slip past the assertPoCapacity above.
+    try {
+      await applyPoDeltasGuarded(poDelta);
+    } catch (error) {
+      return respondToPoError(res, error);
+    }
+
     const id = uuidv4();
     const now = dispatch_date || new Date().toISOString();
-    const order_number = await nextSequence(Dispatch, "order_number", ORDER_NUMBER_PREFIX, ORDER_NUMBER_WIDTH);
-    const total_quantity = resolvedItems.reduce((sum, i) => sum + (i.quantity || 0), 0);
+    const total_quantity = sumQuantity(resolvedItems);
 
-    const entry = await Dispatch.create({
-      id,
-      order_number,
-      customer_name,
-      // Populate legacy fields from first item for backwards compat
-      brand_id: resolvedItems[0].brand_id,
-      brand_name: resolvedItems[0].brand_name,
-      size_id: resolvedItems[0].size_id,
-      size_name: resolvedItems[0].size_name,
-      quantity: total_quantity,
-      purchase_order_id: resolvedItems[0].purchase_order_id,
-      items: resolvedItems,
-      total_quantity,
-      notes: notes || null,
-      dispatch_date: now,
-      created_by: req.user.username,
-    });
+    let entry;
+    try {
+      const order_number = await nextSequence(Dispatch, "order_number", ORDER_NUMBER_PREFIX, ORDER_NUMBER_WIDTH);
 
-    // Sync PO dispatched quantities
-    for (const item of resolvedItems) {
-      if (item.purchase_order_id) {
-        await PurchaseOrder.updateOne(
-          { id: item.purchase_order_id },
-          { $inc: { quantity_dispatched: item.quantity } }
-        );
-      }
+      entry = await Dispatch.create({
+        id,
+        order_number,
+        customer_name,
+        // Populate legacy fields from first item for backwards compat
+        brand_id: resolvedItems[0].brand_id,
+        brand_name: resolvedItems[0].brand_name,
+        size_id: resolvedItems[0].size_id,
+        size_name: resolvedItems[0].size_name,
+        quantity: total_quantity,
+        purchase_order_id: resolvedItems[0].purchase_order_id,
+        items: resolvedItems,
+        total_quantity,
+        notes: notes || null,
+        dispatch_date: now,
+        created_by: req.user.username,
+      });
+    } catch (error) {
+      // Best-effort compensation for the counters claimed above. If it also
+      // fails we stay on the conservative side (counters too high).
+      await revertPoDeltas(poDelta);
+      throw error;
     }
 
-    await logActivity({ action: "CREATE", entity_type: "dispatch", entity_id: id, entity_label: order_number, user: req.user, details: `Dispatched ${total_quantity} units to ${customer_name}`, ip_address: req.ip });
+    await logActivity({ action: "CREATE", entity_type: "dispatch", entity_id: id, entity_label: entry.order_number, user: req.user, details: `Dispatched ${total_quantity} units to ${customer_name}`, ip_address: req.ip });
 
     res.json(normalizeDispatch(entry));
   } catch (error) {
@@ -140,57 +157,56 @@ router.get("/", authenticate, async (req, res) => {
 
 router.put("/:dispatchId", authenticate, async (req, res) => {
   try {
-    const { notes, customer_name, dispatch_date, items: reqItems,
-      brand_id, brand_name, size_id, size_name, quantity, purchase_order_id } = req.body;
+    const { notes, customer_name, dispatch_date } = req.body;
 
     const oldDispatch = await Dispatch.findOne({ id: req.params.dispatchId }).lean();
     if (!oldDispatch) return res.status(404).json({ detail: "Dispatch not found" });
-    const oldNormalized = normalizeDispatch(oldDispatch);
+    const oldItems = itemsOf(oldDispatch);
 
-    // Build new items
-    let newItems;
-    if (reqItems && reqItems.length > 0) {
-      newItems = reqItems;
-    } else if (brand_id && size_id && quantity) {
-      newItems = [{ brand_id, brand_name, size_id, size_name, quantity, purchase_order_id: purchase_order_id || null }];
-    } else {
-      newItems = oldNormalized.items;
+    const newItems = itemsFromPayload(req.body) || oldItems;
+    const invalidItem = findInvalidQuantity(newItems);
+    if (invalidItem) {
+      return res.status(400).json({
+        detail: `Quantity must be greater than 0 for ${invalidItem.brand_name || "item"} ${invalidItem.size_name || ""}`.trim(),
+      });
     }
-
-    // Phase 1: Validate PO capacity using net delta per PO
-    const poDelta = {};
-    for (const oi of oldNormalized.items) {
-      if (oi.purchase_order_id) {
-        poDelta[oi.purchase_order_id] = (poDelta[oi.purchase_order_id] || 0) - (oi.quantity || 0);
-      }
-    }
-    for (const item of newItems) {
-      if (item.purchase_order_id) {
-        poDelta[item.purchase_order_id] = (poDelta[item.purchase_order_id] || 0) + (item.quantity || 0);
-      }
-    }
-    for (const [poId, delta] of Object.entries(poDelta)) {
-      if (delta > 0) {
-        const po = await PurchaseOrder.findOne({ id: poId }).lean();
-        if (!po) return res.status(404).json({ detail: `Purchase order not found` });
-        const remaining = po.quantity - (po.quantity_dispatched || 0);
-        if (delta > remaining) {
-          return res.status(400).json({ detail: `Cannot allocate ${delta} more to PO ${po.serial_no}, only ${remaining} remaining` });
-        }
-      }
+    if (newItems.length === 0) {
+      return res.status(400).json({ detail: "A dispatch must have at least one item" });
     }
 
-    // Phase 2: Reverse old PO syncs
-    for (const oi of oldNormalized.items) {
-      if (oi.purchase_order_id) {
-        await PurchaseOrder.updateOne(
-          { id: oi.purchase_order_id },
-          { $inc: { quantity_dispatched: -(oi.quantity || 0) } }
-        );
-      }
+    // Phase 1: validate the net change per PO, then the net change in finished
+    // goods demand. Netting is what makes an unchanged line a no-op instead of
+    // a reversal followed by a re-allocation.
+    const poDelta = netPoDeltas(oldItems, newItems);
+    try {
+      await assertPoCapacity(poDelta);
+    } catch (error) {
+      return respondToPoError(res, error);
     }
 
-    const total_quantity = newItems.reduce((sum, i) => sum + (i.quantity || 0), 0);
+    const shortage = await findFinishedGoodsShortage(oldItems, newItems, {
+      productionModel: Production,
+      dispatchModel: Dispatch,
+    });
+    if (shortage) {
+      return res.status(400).json({
+        detail: `Additional qty (${shortage.quantity}) for ${shortage.brand_name} ${shortage.size_name} exceeds finished goods available (${shortage.available})`,
+      });
+    }
+
+    // Phase 2: ONE net apply. This handler used to reverse every old PO sync,
+    // update the dispatch, then re-apply the new syncs. A failure after the
+    // reverse and before the re-apply left the PO counters silently *lower*
+    // than the truth — the worst outcome available here, because a too-small
+    // dispatched figure looks perfectly plausible and quietly authorises an
+    // over-dispatch. A single net apply has no such window.
+    try {
+      await applyPoDeltasGuarded(poDelta);
+    } catch (error) {
+      return respondToPoError(res, error);
+    }
+
+    const total_quantity = sumQuantity(newItems);
     const updateData = {
       items: newItems,
       total_quantity,
@@ -199,7 +215,7 @@ router.put("/:dispatchId", authenticate, async (req, res) => {
       size_id: newItems[0].size_id,
       size_name: newItems[0].size_name,
       quantity: total_quantity,
-      purchase_order_id: newItems[0].purchase_order_id,
+      purchase_order_id: newItems[0].purchase_order_id || null,
       updated_by: req.user.username,
       updated_at: new Date().toISOString(),
     };
@@ -207,16 +223,19 @@ router.put("/:dispatchId", authenticate, async (req, res) => {
     if (customer_name !== undefined) updateData.customer_name = customer_name;
     if (dispatch_date !== undefined) updateData.dispatch_date = dispatch_date;
 
-    await Dispatch.updateOne({ id: req.params.dispatchId }, { $set: updateData });
-
-    // Phase 3: Apply new PO syncs
-    for (const item of newItems) {
-      if (item.purchase_order_id) {
-        await PurchaseOrder.updateOne(
-          { id: item.purchase_order_id },
-          { $inc: { quantity_dispatched: item.quantity } }
-        );
+    try {
+      const result = await Dispatch.updateOne({ id: req.params.dispatchId }, { $set: updateData });
+      if (result.matchedCount === 0) {
+        // Deleted under us. Undo this request's net delta so the counters go
+        // back to what they were a moment ago; if the concurrent DELETE also
+        // released the old quantities they can end up low, which
+        // GET /api/admin/reconcile reports.
+        await revertPoDeltas(poDelta);
+        return res.status(404).json({ detail: "Dispatch not found" });
       }
+    } catch (error) {
+      await revertPoDeltas(poDelta);
+      throw error;
     }
 
     await logActivity({ action: "UPDATE", entity_type: "dispatch", entity_id: req.params.dispatchId, entity_label: oldDispatch.order_number, user: req.user, details: `Updated dispatch ${oldDispatch.order_number}`, ip_address: req.ip });
@@ -232,19 +251,20 @@ router.delete("/:dispatchId", authenticate, async (req, res) => {
   try {
     const dispatch = await Dispatch.findOne({ id: req.params.dispatchId }).lean();
     if (!dispatch) return res.status(404).json({ detail: "Dispatch not found" });
-    const normalized = normalizeDispatch(dispatch);
 
-    // Reverse PO sync for all items
-    for (const item of normalized.items) {
-      if (item.purchase_order_id) {
-        await PurchaseOrder.updateOne(
-          { id: item.purchase_order_id },
-          { $inc: { quantity_dispatched: -(item.quantity || 0) } }
-        );
-      }
+    const items = itemsOf(dispatch);
+
+    // Deletion reverses the safe ordering used on create, for the same reason:
+    // the row goes first, so a failure before the counters are released leaves
+    // the POs looking more dispatched than they are (visible, blocks further
+    // dispatch) rather than less (invisible, authorises over-dispatch).
+    const deleted = await Dispatch.deleteOne({ id: req.params.dispatchId });
+    if (deleted.deletedCount === 0) {
+      return res.status(404).json({ detail: "Dispatch not found" });
     }
 
-    await Dispatch.deleteOne({ id: req.params.dispatchId });
+    // Negative deltas only: clamped at 0 server-side, and never refused.
+    await applyPoDeltasGuarded(poDeltasFor(items, -1));
 
     await logActivity({ action: "DELETE", entity_type: "dispatch", entity_id: req.params.dispatchId, entity_label: dispatch.order_number, user: req.user, details: `Deleted dispatch ${dispatch.order_number}`, ip_address: req.ip });
 

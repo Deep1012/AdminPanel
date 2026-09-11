@@ -7,6 +7,7 @@ const PurchaseOrder = require("../models/PurchaseOrder");
 const ActivityLog = require("../models/ActivityLog");
 const { authenticate, adminRequired } = require("../middleware/auth");
 const { logActivity } = require("../lib/activityLogger");
+const { reconcile, DEFAULT_SAMPLE_LIMIT } = require("../lib/reconcile");
 
 const router = express.Router();
 
@@ -33,6 +34,39 @@ router.post("/clear-operational-data", authenticate, adminRequired, async (req, 
         purchaseOrders: purchaseOrders.deletedCount,
       },
     });
+  } catch (error) {
+    res.status(500).json({ detail: error.message });
+  }
+});
+
+/**
+ * GET /api/admin/reconcile
+ *
+ * Recompute every derived stock counter from its source rows and report the
+ * disagreements. STRICTLY READ-ONLY: it issues no writes at all, not even an
+ * activity-log entry, so it is safe to hit on production data at any time.
+ *
+ * Its purpose is to be run before the stock guards added alongside it start
+ * refusing writes, so that drift already present in the data is known rather
+ * than discovered as a mysterious rejection on the shop floor.
+ *
+ * Optional ?sample_limit=N (1..200) bounds the rows returned per check; counts
+ * are always complete. The cap keeps the response well inside the ~4.5MB
+ * serverless response ceiling.
+ */
+router.get("/reconcile", authenticate, adminRequired, async (req, res) => {
+  try {
+    const requested = parseInt(req.query.sample_limit, 10);
+    const sampleLimit = Number.isInteger(requested)
+      ? Math.min(200, Math.max(1, requested))
+      : DEFAULT_SAMPLE_LIMIT;
+
+    const report = await reconcile({
+      models: { Purchase, PrintingJob, Production, Dispatch, PurchaseOrder },
+      sampleLimit,
+    });
+
+    res.json(report);
   } catch (error) {
     res.status(500).json({ detail: error.message });
   }
