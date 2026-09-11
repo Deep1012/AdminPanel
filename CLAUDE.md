@@ -135,7 +135,9 @@ Dark industrial theme ("Tactical Factory"). Safety orange primary (`#ea580c`), d
 - [CRM.md](CRM.md) — operator-facing user guide
 
 ## Conventions
-- Forms are hand-rolled `useState` + manual checks. `react-hook-form` and `zod` are installed but **not used anywhere** — don't assume validation exists; see [ARCHITECTURE.md](ARCHITECTURE.md) *Known gaps*
+- Forms use `react-hook-form` with `zodResolver`. Every schema lives in `frontend/src/lib/schemas.js`, one per entity, with rules mirroring what the backend route/model actually enforces and a specific message per rule. Fields render through the shadcn `Form*` wrappers (`frontend/src/components/ui/form.jsx`); Radix `Select` and `SearchableSelect` are driven by `FormField`/`Controller`, never bare `register`
+- Multi-item dialogs (Dispatch, Purchase Orders, Printing) pair a `useFieldArray` list with a **second `useForm` instance for the staging row**, submitted programmatically from the Add button (HTML forbids nested `<form>`). That staging block needs its own `<Form>` provider — shadcn's `FormMessage` resolves errors through `useFormContext()`, so without it the staged field's messages silently never render
+- Form smoke tests live beside each page (`frontend/src/pages/*.test.jsx`) and mock `src/lib/api.js` via `src/lib/__mocks__/api.js`; `frontend/src/lib/schemas.test.js` unit-tests the rules directly. Run with `cd frontend && npx craco test --watchAll=false`
 - Toast notifications via sonner (bottom-right)
 - Charts via recharts
 - Excel export via xlsx (file-saver)
