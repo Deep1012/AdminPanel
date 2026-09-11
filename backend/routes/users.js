@@ -14,9 +14,30 @@ router.get("/", authenticate, adminRequired, async (req, res) => {
   }
 });
 
+// Mirrors the allowlist in routes/auth.js. Both paths must agree: register
+// gated `role` but this handler did not, and because updateOne/$set runs
+// without runValidators the Mongoose enum on User.role was bypassed too, so an
+// arbitrary role string reached the database on the edit path. An invalid role
+// is not an escalation (adminRequired tests `=== "admin"`, so a garbage value
+// denies rather than grants) but it silently strips the user's access.
+const ALLOWED_ROLES = ["admin", "user"];
+
 router.put("/:userId", authenticate, adminRequired, async (req, res) => {
   try {
     const { username, email, role, is_locked, password } = req.body;
+
+    if (role !== undefined && !ALLOWED_ROLES.includes(role)) {
+      return res.status(400).json({ detail: `role must be one of: ${ALLOWED_ROLES.join(", ")}` });
+    }
+    for (const [field, value] of [["username", username], ["email", email], ["password", password]]) {
+      if (value !== undefined && typeof value !== "string") {
+        return res.status(400).json({ detail: `${field} must be a string` });
+      }
+    }
+    if (is_locked !== undefined && typeof is_locked !== "boolean") {
+      return res.status(400).json({ detail: "is_locked must be a boolean" });
+    }
+
     const updateData = {};
     if (username !== undefined) updateData.username = username;
     if (email !== undefined) updateData.email = email;
@@ -35,6 +56,11 @@ router.put("/:userId", authenticate, adminRequired, async (req, res) => {
 
     res.json({ message: "User updated successfully" });
   } catch (error) {
+    // User.email is uniquely indexed; without this an email collision returns a
+    // raw driver message in a 500 rather than something the UI can show.
+    if (error.code === 11000) {
+      return res.status(400).json({ detail: "Email already registered to another user" });
+    }
     res.status(500).json({ detail: error.message });
   }
 });
