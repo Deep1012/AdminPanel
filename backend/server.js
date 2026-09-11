@@ -4,12 +4,24 @@ require("dotenv").config();
 // jwt.sign throw at request time; an absent MONGO_URL fails every query; an
 // absent CRON_SECRET makes the backup cron endpoint refuse to run. Better to
 // refuse to boot than to serve a half-configured API.
-const REQUIRED_ENV_VARS = ["MONGO_URL", "JWT_SECRET", "CRON_SECRET"];
+// Fail fast only on variables without which nothing works at all. CRON_SECRET
+// is deliberately NOT in this list: the monthly-backup endpoint already fails
+// closed on its own when the secret is absent (see routes/backup.js), so
+// requiring it here would turn "the backup doesn't run" into "the whole API is
+// down" — a strictly worse outcome for a factory that depends on this API.
+const REQUIRED_ENV_VARS = ["MONGO_URL", "JWT_SECRET"];
 const missingEnvVars = REQUIRED_ENV_VARS.filter((name) => !process.env[name]);
 if (missingEnvVars.length > 0) {
   throw new Error(
     `Missing required environment variable(s): ${missingEnvVars.join(", ")}. ` +
     "Set them in the environment (or backend/.env for local development) before starting the server."
+  );
+}
+
+if (!process.env.CRON_SECRET) {
+  console.warn(
+    "[startup] CRON_SECRET is not set. /api/backups/cron will refuse to run " +
+    "(HTTP 500) until it is configured, so scheduled backups will not happen."
   );
 }
 
