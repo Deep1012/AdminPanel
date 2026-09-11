@@ -1,32 +1,36 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { useAuth } from '../context/AuthContext';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '../components/ui/form';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Package, AlertCircle, Loader2 } from 'lucide-react';
 import { getErrorMessage } from '../lib/errors';
+import { loginSchema } from '../lib/schemas';
+
+const LABEL_CLASS = 'text-xs font-bold uppercase tracking-widest text-muted-foreground';
 
 const Login = () => {
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
     const [error, setError] = useState('');
-    const [loading, setLoading] = useState(false);
     const { login } = useAuth();
     const navigate = useNavigate();
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
+    const form = useForm({
+        resolver: zodResolver(loginSchema),
+        defaultValues: { email: '', password: '' },
+    });
+    const { isSubmitting } = form.formState;
+
+    const onSubmit = async (values) => {
         setError('');
-        setLoading(true);
         try {
-            await login(email, password);
+            await login(values.email, values.password);
             navigate('/dashboard');
         } catch (err) {
             setError(getErrorMessage(err, 'Login failed. Please check your credentials.'));
-        } finally {
-            setLoading(false);
         }
     };
 
@@ -45,25 +49,45 @@ const Login = () => {
                     </div>
                 </CardHeader>
                 <CardContent>
-                    <form onSubmit={handleSubmit} className="space-y-6">
-                        {error && (
-                            <div className="flex items-center gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-sm text-destructive text-sm" data-testid="login-error">
-                                <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                                {error}
-                            </div>
-                        )}
-                        <div className="space-y-2">
-                            <Label htmlFor="email" className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Email</Label>
-                            <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="admin@crm.com" required className="bg-background border-input rounded-sm font-mono" data-testid="login-email" />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="password" className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Password</Label>
-                            <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required className="bg-background border-input rounded-sm font-mono" data-testid="login-password" />
-                        </div>
-                        <Button type="submit" className="w-full font-bold uppercase tracking-wider rounded-sm" disabled={loading} data-testid="login-submit">
-                            {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Authenticating...</> : 'Login'}
-                        </Button>
-                    </form>
+                    <Form {...form}>
+                        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6" noValidate>
+                            {error && (
+                                <div className="flex items-center gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-sm text-destructive text-sm" data-testid="login-error">
+                                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                                    {error}
+                                </div>
+                            )}
+                            <FormField
+                                control={form.control}
+                                name="email"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className={LABEL_CLASS}>Email</FormLabel>
+                                        <FormControl>
+                                            <Input {...field} type="email" placeholder="admin@crm.com" className="bg-background border-input rounded-sm font-mono" data-testid="login-email" />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <FormField
+                                control={form.control}
+                                name="password"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className={LABEL_CLASS}>Password</FormLabel>
+                                        <FormControl>
+                                            <Input {...field} type="password" placeholder="••••••••" className="bg-background border-input rounded-sm font-mono" data-testid="login-password" />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <Button type="submit" className="w-full font-bold uppercase tracking-wider rounded-sm" disabled={isSubmitting} data-testid="login-submit">
+                                {isSubmitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Authenticating...</> : 'Login'}
+                            </Button>
+                        </form>
+                    </Form>
                 </CardContent>
             </Card>
         </div>

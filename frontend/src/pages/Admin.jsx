@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '../components/ui/form';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Badge } from '../components/ui/badge';
 import { Switch } from '../components/ui/switch';
@@ -18,6 +20,9 @@ import { Trash2, Pencil, Loader2, AlertCircle, Lock, Unlock, UserPlus, Download,
 import { toast } from 'sonner';
 import { exportToExcel } from '../lib/exportToExcel';
 import { getErrorMessage } from '../lib/errors';
+import { userSchema } from '../lib/schemas';
+
+const LABEL_CLASS = 'text-xs font-bold uppercase tracking-widest text-muted-foreground';
 
 const USERS_EXPORT_COLUMNS = [
     { header: 'Username', key: 'username' },
@@ -27,19 +32,26 @@ const USERS_EXPORT_COLUMNS = [
     { header: 'Locked', key: 'is_locked', transform: (v) => v ? 'Yes' : 'No' },
 ];
 
-const emptyUser = { username: '', email: '', password: '', role: 'user' };
+const emptyUser = { mode: 'create', username: '', email: '', password: '', role: 'user' };
 
 const Admin = () => {
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [dialogOpen, setDialogOpen] = useState(false);
-    const [submitting, setSubmitting] = useState(false);
     const [editingId, setEditingId] = useState(null);
-    const [formData, setFormData] = useState({ ...emptyUser });
     const [deleteTarget, setDeleteTarget] = useState(null);
     const [clearDataOpen, setClearDataOpen] = useState(false);
     const [clearing, setClearing] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
+
+    const form = useForm({
+        resolver: zodResolver(userSchema),
+        defaultValues: { ...emptyUser },
+    });
+    const { isSubmitting } = form.formState;
+    // The credentials hint panel echoes what is typed, so it needs live values.
+    const watchedEmail = form.watch('email');
+    const watchedPassword = form.watch('password');
 
     const filteredUsers = useTableFilter({
         data: users, searchTerm, searchFields: ['username', 'email'], filters: []
@@ -55,31 +67,33 @@ const Admin = () => {
         finally { setLoading(false); }
     };
 
-    const openCreate = () => { setEditingId(null); setFormData({ ...emptyUser }); setDialogOpen(true); };
+    const openCreate = () => { setEditingId(null); form.reset({ ...emptyUser }); setDialogOpen(true); };
     const openEdit = (user) => {
         setEditingId(user.id);
-        setFormData({ username: user.username, email: user.email, password: '', role: user.role });
+        form.reset({ mode: 'edit', username: user.username, email: user.email, password: '', role: user.role });
         setDialogOpen(true);
     };
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        if (!formData.username || !formData.email) { toast.error('Please fill required fields'); return; }
-        if (!editingId && !formData.password) { toast.error('Password is required for new users'); return; }
-        setSubmitting(true);
+    const onSubmit = async (values) => {
         try {
             if (editingId) {
-                const payload = { username: formData.username, email: formData.email, role: formData.role };
-                if (formData.password) payload.password = formData.password;
+                // The edit path deliberately omits `password` when left blank so
+                // the backend keeps the existing hash.
+                const payload = { username: values.username, email: values.email, role: values.role };
+                if (values.password) payload.password = values.password;
                 await usersAPI.update(editingId, payload);
                 toast.success('User updated');
             } else {
-                await authAPI.register(formData);
-                toast.success(`User created! Credentials: ${formData.email} / ${formData.password}`);
+                await authAPI.register({
+                    username: values.username,
+                    email: values.email,
+                    password: values.password,
+                    role: values.role,
+                });
+                toast.success(`User created! Credentials: ${values.email} / ${values.password}`);
             }
             setDialogOpen(false); fetchData();
         } catch (err) { toast.error(getErrorMessage(err, 'Failed to save user')); }
-        finally { setSubmitting(false); }
     };
 
     const handleToggleLock = async (userId, currentLock) => {
@@ -135,42 +149,80 @@ const Admin = () => {
                             {editingId ? 'Edit User' : 'Create New User'}
                         </DialogTitle>
                     </DialogHeader>
-                    <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-                        <div className="space-y-2">
-                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Username *</Label>
-                            <Input value={formData.username} onChange={(e) => setFormData({ ...formData, username: e.target.value })} placeholder="John Doe" className="bg-background border-input rounded-sm" data-testid="new-user-name" />
-                        </div>
-                        <div className="space-y-2">
-                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Email *</Label>
-                            <Input type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} placeholder="user@company.com" className="bg-background border-input rounded-sm" data-testid="new-user-email" />
-                        </div>
-                        <div className="space-y-2">
-                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-                                Password {editingId ? '(leave blank to keep current)' : '*'}
-                            </Label>
-                            <Input type="text" value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} placeholder={editingId ? '--------' : 'Create password'} className="bg-background border-input rounded-sm font-mono" data-testid="new-user-password" />
-                        </div>
-                        <div className="space-y-2">
-                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Role</Label>
-                            <Select value={formData.role} onValueChange={(v) => setFormData({ ...formData, role: v })}>
-                                <SelectTrigger className="bg-background border-input rounded-sm"><SelectValue /></SelectTrigger>
-                                <SelectContent className="bg-card border-border rounded-sm">
-                                    <SelectItem value="user">User</SelectItem>
-                                    <SelectItem value="admin">Admin</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        {!editingId && (
-                            <div className="p-3 bg-primary/10 rounded-sm border border-primary/20 text-sm">
-                                <p className="font-bold text-primary">Share these credentials with the user:</p>
-                                <p className="font-mono mt-1">Email: {formData.email || '...'}</p>
-                                <p className="font-mono">Password: {formData.password || '...'}</p>
-                            </div>
-                        )}
-                        <Button type="submit" className="w-full font-bold uppercase tracking-wider rounded-sm" disabled={submitting}>
-                            {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : (editingId ? 'Update User' : 'Create User')}
-                        </Button>
-                    </form>
+                    <Form {...form}>
+                        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 mt-4" noValidate>
+                            <FormField
+                                control={form.control}
+                                name="username"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className={LABEL_CLASS}>Username *</FormLabel>
+                                        <FormControl>
+                                            <Input {...field} placeholder="John Doe" className="bg-background border-input rounded-sm" data-testid="new-user-name" />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <FormField
+                                control={form.control}
+                                name="email"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className={LABEL_CLASS}>Email *</FormLabel>
+                                        <FormControl>
+                                            <Input {...field} type="email" placeholder="user@company.com" className="bg-background border-input rounded-sm" data-testid="new-user-email" />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <FormField
+                                control={form.control}
+                                name="password"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className={LABEL_CLASS}>
+                                            Password {editingId ? '(leave blank to keep current)' : '*'}
+                                        </FormLabel>
+                                        <FormControl>
+                                            <Input {...field} type="text" placeholder={editingId ? '--------' : 'Create password'} className="bg-background border-input rounded-sm font-mono" data-testid="new-user-password" />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <FormField
+                                control={form.control}
+                                name="role"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className={LABEL_CLASS}>Role</FormLabel>
+                                        <Select value={field.value} onValueChange={field.onChange}>
+                                            <FormControl>
+                                                <SelectTrigger className="bg-background border-input rounded-sm" data-testid="new-user-role"><SelectValue /></SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent className="bg-card border-border rounded-sm">
+                                                <SelectItem value="user">User</SelectItem>
+                                                <SelectItem value="admin">Admin</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            {!editingId && (
+                                <div className="p-3 bg-primary/10 rounded-sm border border-primary/20 text-sm">
+                                    <p className="font-bold text-primary">Share these credentials with the user:</p>
+                                    <p className="font-mono mt-1">Email: {watchedEmail || '...'}</p>
+                                    <p className="font-mono">Password: {watchedPassword || '...'}</p>
+                                </div>
+                            )}
+                            <Button type="submit" className="w-full font-bold uppercase tracking-wider rounded-sm" disabled={isSubmitting} data-testid="submit-user">
+                                {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : (editingId ? 'Update User' : 'Create User')}
+                            </Button>
+                        </form>
+                    </Form>
                 </DialogContent>
             </Dialog>
 
@@ -213,7 +265,7 @@ const Admin = () => {
                                             </td>
                                             <td>
                                                 <div className="flex gap-1">
-                                                    <Button variant="ghost" size="icon" onClick={() => openEdit(user)} className="text-muted-foreground hover:text-primary"><Pencil className="w-4 h-4" /></Button>
+                                                    <Button variant="ghost" size="icon" onClick={() => openEdit(user)} className="text-muted-foreground hover:text-primary" data-testid={'edit-user-' + user.id}><Pencil className="w-4 h-4" /></Button>
                                                     <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(user.id)} className="text-muted-foreground hover:text-destructive"><Trash2 className="w-4 h-4" /></Button>
                                                 </div>
                                             </td>

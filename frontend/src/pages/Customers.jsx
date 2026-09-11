@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '../components/ui/form';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Badge } from '../components/ui/badge';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -17,6 +19,9 @@ import { toast } from 'sonner';
 import { exportToExcel } from '../lib/exportToExcel';
 import ImportExcelButton from '../components/ImportExcelButton';
 import { getErrorMessage } from '../lib/errors';
+import { customerSchema } from '../lib/schemas';
+
+const LABEL_CLASS = 'text-xs font-bold uppercase tracking-widest text-muted-foreground';
 
 const CUSTOMERS_EXPORT_COLUMNS = [
     { header: '#', key: 'id', transform: (v, row, idx) => idx + 1 },
@@ -28,11 +33,15 @@ const Customers = () => {
     const [customers, setCustomers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [dialogOpen, setDialogOpen] = useState(false);
-    const [submitting, setSubmitting] = useState(false);
     const [editingId, setEditingId] = useState(null);
-    const [customerName, setCustomerName] = useState('');
     const [deleteTarget, setDeleteTarget] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
+
+    const form = useForm({
+        resolver: zodResolver(customerSchema),
+        defaultValues: { name: '' },
+    });
+    const { isSubmitting } = form.formState;
 
     const filteredCustomers = useTableFilter({
         data: customers, searchTerm, searchFields: ['name'], filters: []
@@ -48,25 +57,22 @@ const Customers = () => {
         finally { setLoading(false); }
     };
 
-    const openCreate = () => { setEditingId(null); setCustomerName(''); setDialogOpen(true); };
-    const openEdit = (customer) => { setEditingId(customer.id); setCustomerName(customer.name); setDialogOpen(true); };
+    const openCreate = () => { setEditingId(null); form.reset({ name: '' }); setDialogOpen(true); };
+    const openEdit = (customer) => { setEditingId(customer.id); form.reset({ name: customer.name }); setDialogOpen(true); };
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        if (!customerName.trim()) { toast.error('Enter customer name'); return; }
-        setSubmitting(true);
+    const onSubmit = async (values) => {
+        const payload = { name: values.name };
         try {
             if (editingId) {
-                await customersAPI.update(editingId, { name: customerName.trim() });
+                await customersAPI.update(editingId, payload);
                 toast.success('Customer updated');
             } else {
-                await customersAPI.create({ name: customerName.trim() });
+                await customersAPI.create(payload);
                 toast.success('Customer added');
             }
             setDialogOpen(false);
             fetchCustomers();
         } catch (err) { toast.error(getErrorMessage(err, 'Failed to save customer')); }
-        finally { setSubmitting(false); }
     };
 
     const handleDelete = async () => {
@@ -115,15 +121,26 @@ const Customers = () => {
                             {editingId ? 'Edit Customer' : 'Add Customer'}
                         </DialogTitle>
                     </DialogHeader>
-                    <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-                        <div className="space-y-2">
-                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Customer Name *</Label>
-                            <Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="e.g., Mehta Paints & Hardware" className="bg-background border-input rounded-sm" data-testid="customer-name-input" />
-                        </div>
-                        <Button type="submit" className="w-full font-bold uppercase tracking-wider rounded-sm" disabled={submitting} data-testid="submit-customer">
-                            {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : (editingId ? 'Update Customer' : 'Add Customer')}
-                        </Button>
-                    </form>
+                    <Form {...form}>
+                        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 mt-4" noValidate>
+                            <FormField
+                                control={form.control}
+                                name="name"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className={LABEL_CLASS}>Customer Name *</FormLabel>
+                                        <FormControl>
+                                            <Input {...field} placeholder="e.g., Mehta Paints & Hardware" className="bg-background border-input rounded-sm" data-testid="customer-name-input" />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <Button type="submit" className="w-full font-bold uppercase tracking-wider rounded-sm" disabled={isSubmitting} data-testid="submit-customer">
+                                {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : (editingId ? 'Update Customer' : 'Add Customer')}
+                            </Button>
+                        </form>
+                    </Form>
                 </DialogContent>
             </Dialog>
 
@@ -164,7 +181,7 @@ const Customers = () => {
                                             <td className="text-muted-foreground">{formatDate(customer.created_at)}</td>
                                             <td>
                                                 <div className="flex gap-1">
-                                                    <Button variant="ghost" size="icon" onClick={() => openEdit(customer)} className="text-muted-foreground hover:text-primary"><Pencil className="w-4 h-4" /></Button>
+                                                    <Button variant="ghost" size="icon" onClick={() => openEdit(customer)} className="text-muted-foreground hover:text-primary" data-testid={'edit-customer-' + customer.id}><Pencil className="w-4 h-4" /></Button>
                                                     <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(customer.id)} className="text-muted-foreground hover:text-destructive"><Trash2 className="w-4 h-4" /></Button>
                                                 </div>
                                             </td>

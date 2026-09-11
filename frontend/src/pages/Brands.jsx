@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '../components/ui/form';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Badge } from '../components/ui/badge';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -18,6 +20,9 @@ import { toast } from 'sonner';
 import { exportToExcel } from '../lib/exportToExcel';
 import ImportExcelButton from '../components/ImportExcelButton';
 import { getErrorMessage } from '../lib/errors';
+import { brandSchema } from '../lib/schemas';
+
+const LABEL_CLASS = 'text-xs font-bold uppercase tracking-widest text-muted-foreground';
 
 const BRANDS_EXPORT_COLUMNS = [
     { header: '#', key: 'id', transform: (v, row, idx) => idx + 1 },
@@ -29,11 +34,15 @@ const Brands = () => {
     const [brands, setBrands] = useState([]);
     const [loading, setLoading] = useState(true);
     const [dialogOpen, setDialogOpen] = useState(false);
-    const [submitting, setSubmitting] = useState(false);
     const [editingId, setEditingId] = useState(null);
-    const [brandName, setBrandName] = useState('');
     const [deleteTarget, setDeleteTarget] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
+
+    const form = useForm({
+        resolver: zodResolver(brandSchema),
+        defaultValues: { name: '' },
+    });
+    const { isSubmitting } = form.formState;
 
     const filteredBrands = useTableFilter({
         data: brands, searchTerm, searchFields: ['name'], filters: []
@@ -49,25 +58,22 @@ const Brands = () => {
         finally { setLoading(false); }
     };
 
-    const openCreate = () => { setEditingId(null); setBrandName(''); setDialogOpen(true); };
-    const openEdit = (brand) => { setEditingId(brand.id); setBrandName(brand.name); setDialogOpen(true); };
+    const openCreate = () => { setEditingId(null); form.reset({ name: '' }); setDialogOpen(true); };
+    const openEdit = (brand) => { setEditingId(brand.id); form.reset({ name: brand.name }); setDialogOpen(true); };
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        if (!brandName.trim()) { toast.error('Enter brand name'); return; }
-        setSubmitting(true);
+    const onSubmit = async (values) => {
+        const payload = { name: values.name.toUpperCase() };
         try {
             if (editingId) {
-                await brandsAPI.update(editingId, { name: brandName.trim().toUpperCase() });
+                await brandsAPI.update(editingId, payload);
                 toast.success('Brand updated');
             } else {
-                await brandsAPI.create({ name: brandName.trim().toUpperCase() });
+                await brandsAPI.create(payload);
                 toast.success('Brand added');
             }
             setDialogOpen(false);
             fetchBrands();
         } catch (err) { toast.error(getErrorMessage(err, 'Failed to save brand')); }
-        finally { setSubmitting(false); }
     };
 
     const handleDelete = async () => {
@@ -116,15 +122,26 @@ const Brands = () => {
                             {editingId ? 'Edit Brand' : 'Add Brand'}
                         </DialogTitle>
                     </DialogHeader>
-                    <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-                        <div className="space-y-2">
-                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Brand Name *</Label>
-                            <Input value={brandName} onChange={(e) => setBrandName(e.target.value)} placeholder="e.g., SYNCOAT PREMIUM" className="bg-background border-input rounded-sm" data-testid="brand-name-input" />
-                        </div>
-                        <Button type="submit" className="w-full font-bold uppercase tracking-wider rounded-sm" disabled={submitting} data-testid="submit-brand">
-                            {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : (editingId ? 'Update Brand' : 'Add Brand')}
-                        </Button>
-                    </form>
+                    <Form {...form}>
+                        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 mt-4" noValidate>
+                            <FormField
+                                control={form.control}
+                                name="name"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className={LABEL_CLASS}>Brand Name *</FormLabel>
+                                        <FormControl>
+                                            <Input {...field} placeholder="e.g., SYNCOAT PREMIUM" className="bg-background border-input rounded-sm" data-testid="brand-name-input" />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <Button type="submit" className="w-full font-bold uppercase tracking-wider rounded-sm" disabled={isSubmitting} data-testid="submit-brand">
+                                {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : (editingId ? 'Update Brand' : 'Add Brand')}
+                            </Button>
+                        </form>
+                    </Form>
                 </DialogContent>
             </Dialog>
 
@@ -171,7 +188,7 @@ const Brands = () => {
                                             <td className="text-muted-foreground">{formatDate(brand.created_at)}</td>
                                             <td>
                                                 <div className="flex gap-1">
-                                                    <Button variant="ghost" size="icon" onClick={() => openEdit(brand)} className="text-muted-foreground hover:text-primary"><Pencil className="w-4 h-4" /></Button>
+                                                    <Button variant="ghost" size="icon" onClick={() => openEdit(brand)} className="text-muted-foreground hover:text-primary" data-testid={'edit-brand-' + brand.id}><Pencil className="w-4 h-4" /></Button>
                                                     <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(brand.id)} className="text-muted-foreground hover:text-destructive"><Trash2 className="w-4 h-4" /></Button>
                                                 </div>
                                             </td>

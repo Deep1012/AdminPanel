@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '../components/ui/form';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Switch } from '../components/ui/switch';
@@ -13,6 +15,9 @@ import { getIcon, AVAILABLE_ICONS } from '../lib/iconMap';
 import { Plus, Trash2, Pencil, Loader2, AlertCircle, ArrowUp, ArrowDown, Menu, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 import { getErrorMessage } from '../lib/errors';
+import { menuItemSchema } from '../lib/schemas';
+
+const LABEL_CLASS = 'text-xs font-bold uppercase tracking-widest text-muted-foreground';
 
 const emptyForm = { label: '', path: '', icon: 'Package', admin_only: false };
 
@@ -20,11 +25,15 @@ const MenuManagement = () => {
     const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(true);
     const [dialogOpen, setDialogOpen] = useState(false);
-    const [submitting, setSubmitting] = useState(false);
     const [editingId, setEditingId] = useState(null);
-    const [formData, setFormData] = useState({ ...emptyForm });
     const [deleteTarget, setDeleteTarget] = useState(null);
     const [reordered, setReordered] = useState(false);
+
+    const form = useForm({
+        resolver: zodResolver(menuItemSchema),
+        defaultValues: { ...emptyForm },
+    });
+    const { isSubmitting } = form.formState;
 
     useEffect(() => { fetchData(); }, []);
 
@@ -38,29 +47,35 @@ const MenuManagement = () => {
         finally { setLoading(false); }
     };
 
-    const openCreate = () => { setEditingId(null); setFormData({ ...emptyForm }); setDialogOpen(true); };
+    const openCreate = () => { setEditingId(null); form.reset({ ...emptyForm }); setDialogOpen(true); };
     const openEdit = (item) => {
         setEditingId(item.id);
-        setFormData({ label: item.label, path: item.path, icon: item.icon, admin_only: item.admin_only });
+        form.reset({
+            label: item.label,
+            path: item.path,
+            icon: item.icon,
+            admin_only: !!item.admin_only,
+        });
         setDialogOpen(true);
     };
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        if (!formData.label || !formData.path || !formData.icon) { toast.error('Please fill all required fields'); return; }
-        if (!formData.path.startsWith('/')) { toast.error('Path must start with /'); return; }
-        setSubmitting(true);
+    const onSubmit = async (values) => {
+        const payload = {
+            label: values.label,
+            path: values.path,
+            icon: values.icon,
+            admin_only: values.admin_only,
+        };
         try {
             if (editingId) {
-                await menuItemsAPI.update(editingId, formData);
+                await menuItemsAPI.update(editingId, payload);
                 toast.success('Menu item updated');
             } else {
-                await menuItemsAPI.create(formData);
+                await menuItemsAPI.create(payload);
                 toast.success('Menu item created');
             }
             setDialogOpen(false); fetchData();
         } catch (err) { toast.error(getErrorMessage(err, 'Failed to save menu item')); }
-        finally { setSubmitting(false); }
     };
 
     const handleDelete = async () => {
@@ -130,39 +145,76 @@ const MenuManagement = () => {
                             {editingId ? 'Edit Menu Item' : 'Add Menu Item'}
                         </DialogTitle>
                     </DialogHeader>
-                    <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-                        <div className="space-y-2">
-                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Label *</Label>
-                            <Input value={formData.label} onChange={(e) => setFormData({ ...formData, label: e.target.value })} placeholder="e.g., REPORTS" className="bg-background border-input rounded-sm" />
-                        </div>
-                        <div className="space-y-2">
-                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Path *</Label>
-                            <Input value={formData.path} onChange={(e) => setFormData({ ...formData, path: e.target.value })} placeholder="e.g., /reports" className="bg-background border-input rounded-sm font-mono" />
-                        </div>
-                        <div className="space-y-2">
-                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Icon *</Label>
-                            <Select value={formData.icon} onValueChange={(v) => setFormData({ ...formData, icon: v })}>
-                                <SelectTrigger className="bg-background border-input rounded-sm"><SelectValue /></SelectTrigger>
-                                <SelectContent className="bg-card border-border rounded-sm max-h-60">
-                                    {AVAILABLE_ICONS.map(name => {
-                                        const Icon = getIcon(name);
-                                        return (
-                                            <SelectItem key={name} value={name}>
-                                                <div className="flex items-center gap-2"><Icon className="w-4 h-4" /> {name}</div>
-                                            </SelectItem>
-                                        );
-                                    })}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div className="flex items-center justify-between">
-                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Admin Only</Label>
-                            <Switch checked={formData.admin_only} onCheckedChange={(v) => setFormData({ ...formData, admin_only: v })} />
-                        </div>
-                        <Button type="submit" className="w-full font-bold uppercase tracking-wider rounded-sm" disabled={submitting}>
-                            {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : (editingId ? 'Update Item' : 'Add Item')}
-                        </Button>
-                    </form>
+                    <Form {...form}>
+                        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 mt-4" noValidate>
+                            <FormField
+                                control={form.control}
+                                name="label"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className={LABEL_CLASS}>Label *</FormLabel>
+                                        <FormControl>
+                                            <Input {...field} placeholder="e.g., REPORTS" className="bg-background border-input rounded-sm" data-testid="menu-item-label" />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <FormField
+                                control={form.control}
+                                name="path"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className={LABEL_CLASS}>Path *</FormLabel>
+                                        <FormControl>
+                                            <Input {...field} placeholder="e.g., /reports" className="bg-background border-input rounded-sm font-mono" data-testid="menu-item-path" />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <FormField
+                                control={form.control}
+                                name="icon"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className={LABEL_CLASS}>Icon *</FormLabel>
+                                        <Select value={field.value} onValueChange={field.onChange}>
+                                            <FormControl>
+                                                <SelectTrigger className="bg-background border-input rounded-sm" data-testid="menu-item-icon"><SelectValue /></SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent className="bg-card border-border rounded-sm max-h-60">
+                                                {AVAILABLE_ICONS.map(name => {
+                                                    const Icon = getIcon(name);
+                                                    return (
+                                                        <SelectItem key={name} value={name}>
+                                                            <div className="flex items-center gap-2"><Icon className="w-4 h-4" /> {name}</div>
+                                                        </SelectItem>
+                                                    );
+                                                })}
+                                            </SelectContent>
+                                        </Select>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <FormField
+                                control={form.control}
+                                name="admin_only"
+                                render={({ field }) => (
+                                    <FormItem className="flex items-center justify-between space-y-0">
+                                        <FormLabel className={LABEL_CLASS}>Admin Only</FormLabel>
+                                        <FormControl>
+                                            <Switch checked={field.value} onCheckedChange={field.onChange} data-testid="menu-item-admin-only" />
+                                        </FormControl>
+                                    </FormItem>
+                                )}
+                            />
+                            <Button type="submit" className="w-full font-bold uppercase tracking-wider rounded-sm" disabled={isSubmitting} data-testid="submit-menu-item">
+                                {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : (editingId ? 'Update Item' : 'Add Item')}
+                            </Button>
+                        </form>
+                    </Form>
                 </DialogContent>
             </Dialog>
 
@@ -201,7 +253,7 @@ const MenuManagement = () => {
                                                     <div className="flex gap-1">
                                                         <Button variant="ghost" size="icon" onClick={() => moveItem(idx, -1)} disabled={idx === 0} className="text-muted-foreground hover:text-primary h-8 w-8"><ArrowUp className="w-3 h-3" /></Button>
                                                         <Button variant="ghost" size="icon" onClick={() => moveItem(idx, 1)} disabled={idx === items.length - 1} className="text-muted-foreground hover:text-primary h-8 w-8"><ArrowDown className="w-3 h-3" /></Button>
-                                                        <Button variant="ghost" size="icon" onClick={() => openEdit(item)} className="text-muted-foreground hover:text-primary h-8 w-8"><Pencil className="w-3 h-3" /></Button>
+                                                        <Button variant="ghost" size="icon" onClick={() => openEdit(item)} className="text-muted-foreground hover:text-primary h-8 w-8" data-testid={'edit-menu-item-' + item.id}><Pencil className="w-3 h-3" /></Button>
                                                         {!item.is_system && (
                                                             <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(item.id)} className="text-muted-foreground hover:text-destructive h-8 w-8"><Trash2 className="w-3 h-3" /></Button>
                                                         )}

@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '../components/ui/form';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Textarea } from '../components/ui/textarea';
@@ -22,6 +24,9 @@ import { toast } from 'sonner';
 import { exportToExcel } from '../lib/exportToExcel';
 import ImportExcelButton from '../components/ImportExcelButton';
 import { getErrorMessage } from '../lib/errors';
+import { productionSchema } from '../lib/schemas';
+
+const LABEL_CLASS = 'text-xs font-bold uppercase tracking-widest text-muted-foreground';
 
 const PRODUCTION_EXPORT_COLUMNS = [
     { header: 'Date', key: 'production_date', transform: (v) => formatDate(v) },
@@ -46,10 +51,17 @@ const Production = () => {
     const [printingStock, setPrintingStock] = useState([]);
     const [loading, setLoading] = useState(true);
     const [dialogOpen, setDialogOpen] = useState(false);
-    const [submitting, setSubmitting] = useState(false);
     const [editingId, setEditingId] = useState(null);
-    const [formData, setFormData] = useState({ ...emptyForm });
     const [deleteTarget, setDeleteTarget] = useState(null);
+
+    const form = useForm({
+        resolver: zodResolver(productionSchema),
+        defaultValues: { ...emptyForm },
+    });
+    const { isSubmitting } = form.formState;
+    // The available-stock panel and the printing-stock hint both mirror the
+    // in-progress selection, so they read the live (raw) field values.
+    const [watchSizeId, watchBrandId, watchQuantity] = form.watch(['size_id', 'brand_id', 'quantity_produced']);
 
     const [searchTerm, setSearchTerm] = useState('');
     const [dateFrom, setDateFrom] = useState('');
@@ -89,10 +101,10 @@ const Production = () => {
         finally { setLoading(false); }
     };
 
-    const openCreate = () => { setEditingId(null); setFormData({ ...emptyForm }); setDialogOpen(true); };
+    const openCreate = () => { setEditingId(null); form.reset({ ...emptyForm }); setDialogOpen(true); };
     const openEdit = (entry) => {
         setEditingId(entry.id);
-        setFormData({
+        form.reset({
             brand_id: entry.brand_id || '', size_id: entry.size_id || '',
             quantity_produced: String(entry.quantity_produced),
             notes: entry.notes || '',
@@ -101,29 +113,24 @@ const Production = () => {
         setDialogOpen(true);
     };
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        if (!formData.brand_id || !formData.size_id || !formData.quantity_produced) {
-            toast.error('Please fill all required fields'); return;
-        }
-        setSubmitting(true);
+    const onSubmit = async (values) => {
         try {
-            const brand = brands.find(b => b.id === formData.brand_id);
-            const size = sizes.find(s => s.id === formData.size_id);
-            const qtyProduced = parseInt(formData.quantity_produced);
+            const brand = brands.find(b => b.id === values.brand_id);
+            const size = sizes.find(s => s.id === values.size_id);
+            // Already coerced to a positive whole number by productionSchema.
+            const qtyProduced = values.quantity_produced;
             const payload = {
-                brand_id: formData.brand_id, brand_name: brand?.name || '',
-                size_id: formData.size_id, size_name: size?.name || '',
+                brand_id: values.brand_id, brand_name: brand?.name || '',
+                size_id: values.size_id, size_name: size?.name || '',
                 quantity_produced: qtyProduced,
                 printing_stock_used: qtyProduced,
-                notes: formData.notes || null,
-                production_date: new Date(formData.production_date).toISOString(),
+                notes: values.notes || null,
+                production_date: new Date(values.production_date).toISOString(),
             };
             if (editingId) { await productionAPI.update(editingId, payload); toast.success('Entry updated'); }
             else { await productionAPI.create(payload); toast.success('Entry added'); }
             setDialogOpen(false); fetchData();
         } catch (err) { toast.error(getErrorMessage(err, 'Failed to save entry')); }
-        finally { setSubmitting(false); }
     };
 
     const handleDelete = async () => {
@@ -196,55 +203,102 @@ const Production = () => {
                             {editingId ? 'Edit Production Entry' : 'Add Production Entry'}
                         </DialogTitle>
                     </DialogHeader>
-                    <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-                        <div className="space-y-2">
-                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Date *</Label>
-                            <Input type="date" value={formData.production_date} onChange={(e) => setFormData({ ...formData, production_date: e.target.value })} className="bg-background border-input rounded-sm font-mono" data-testid="prod-date" />
-                        </div>
-                        <div className="space-y-2">
-                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Size *</Label>
-                            <Select value={formData.size_id} onValueChange={(v) => setFormData({ ...formData, size_id: v })}>
-                                <SelectTrigger className="bg-background border-input rounded-sm" data-testid="prod-size"><SelectValue placeholder="Select size" /></SelectTrigger>
-                                <SelectContent className="bg-card border-border rounded-sm">{sizes.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
-                            </Select>
-                        </div>
-                        <div className="space-y-2">
-                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Brand *</Label>
-                            <Select value={formData.brand_id} onValueChange={(v) => setFormData({ ...formData, brand_id: v })}>
-                                <SelectTrigger className="bg-background border-input rounded-sm" data-testid="prod-brand"><SelectValue placeholder="Select brand" /></SelectTrigger>
-                                <SelectContent className="bg-card border-border rounded-sm max-h-60">{brands.filter(b => !EXCLUDED_BRAND_NAMES.includes(b.name?.toUpperCase())).map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
-                            </Select>
-                        </div>
-                        <div className="space-y-2">
-                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Qty Produced *</Label>
-                            <Input type="number" value={formData.quantity_produced} onChange={(e) => setFormData({ ...formData, quantity_produced: e.target.value })} placeholder="0" className="bg-background border-input rounded-sm font-mono" data-testid="prod-quantity" />
-                            {formData.quantity_produced && (
-                                <p className="text-xs text-muted-foreground">Printing stock used will be set to <span className="font-mono font-bold text-primary">{formatNumber(parseInt(formData.quantity_produced) || 0)}</span></p>
-                            )}
-                        </div>
-                        {formData.size_id && formData.brand_id && (() => {
-                            const size = sizes.find(s => s.id === formData.size_id);
-                            const brand = brands.find(b => b.id === formData.brand_id);
-                            const stock = printingStock.find(s => s.size_name === size?.name && s.brand_name === brand?.name);
-                            return stock ? (
-                                <div className="p-3 bg-primary/10 rounded-sm border border-primary/20 text-sm">
-                                    <p className="text-xs font-bold uppercase text-muted-foreground mb-1">Available Printing Stock</p>
-                                    <div className="grid grid-cols-3 gap-2">
-                                        <div><p className="text-xs text-muted-foreground">Printed</p><p className="font-mono font-bold">{formatNumber(stock.printing_done)}</p></div>
-                                        <div><p className="text-xs text-muted-foreground">Used</p><p className="font-mono">{formatNumber(stock.used_in_production)}</p></div>
-                                        <div><p className="text-xs text-muted-foreground">Available</p><p className="font-mono font-bold text-primary">{formatNumber(stock.available)}</p></div>
+                    <Form {...form}>
+                        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 mt-4" noValidate>
+                            <FormField
+                                control={form.control}
+                                name="production_date"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className={LABEL_CLASS}>Date *</FormLabel>
+                                        <FormControl>
+                                            <Input {...field} type="date" className="bg-background border-input rounded-sm font-mono" data-testid="prod-date" />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <FormField
+                                control={form.control}
+                                name="size_id"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className={LABEL_CLASS}>Size *</FormLabel>
+                                        <Select value={field.value} onValueChange={field.onChange}>
+                                            <FormControl>
+                                                <SelectTrigger className="bg-background border-input rounded-sm" data-testid="prod-size"><SelectValue placeholder="Select size" /></SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent className="bg-card border-border rounded-sm">{sizes.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+                                        </Select>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <FormField
+                                control={form.control}
+                                name="brand_id"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className={LABEL_CLASS}>Brand *</FormLabel>
+                                        <Select value={field.value} onValueChange={field.onChange}>
+                                            <FormControl>
+                                                <SelectTrigger className="bg-background border-input rounded-sm" data-testid="prod-brand"><SelectValue placeholder="Select brand" /></SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent className="bg-card border-border rounded-sm max-h-60">{brands.filter(b => !EXCLUDED_BRAND_NAMES.includes(b.name?.toUpperCase())).map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
+                                        </Select>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <FormField
+                                control={form.control}
+                                name="quantity_produced"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className={LABEL_CLASS}>Qty Produced *</FormLabel>
+                                        <FormControl>
+                                            <Input {...field} type="number" min="1" placeholder="0" className="bg-background border-input rounded-sm font-mono" data-testid="prod-quantity" />
+                                        </FormControl>
+                                        {watchQuantity && (
+                                            <p className="text-xs text-muted-foreground">Printing stock used will be set to <span className="font-mono font-bold text-primary">{formatNumber(parseInt(watchQuantity) || 0)}</span></p>
+                                        )}
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            {watchSizeId && watchBrandId && (() => {
+                                const size = sizes.find(s => s.id === watchSizeId);
+                                const brand = brands.find(b => b.id === watchBrandId);
+                                const stock = printingStock.find(s => s.size_name === size?.name && s.brand_name === brand?.name);
+                                return stock ? (
+                                    <div className="p-3 bg-primary/10 rounded-sm border border-primary/20 text-sm">
+                                        <p className="text-xs font-bold uppercase text-muted-foreground mb-1">Available Printing Stock</p>
+                                        <div className="grid grid-cols-3 gap-2">
+                                            <div><p className="text-xs text-muted-foreground">Printed</p><p className="font-mono font-bold">{formatNumber(stock.printing_done)}</p></div>
+                                            <div><p className="text-xs text-muted-foreground">Used</p><p className="font-mono">{formatNumber(stock.used_in_production)}</p></div>
+                                            <div><p className="text-xs text-muted-foreground">Available</p><p className="font-mono font-bold text-primary">{formatNumber(stock.available)}</p></div>
+                                        </div>
                                     </div>
-                                </div>
-                            ) : null;
-                        })()}
-                        <div className="space-y-2">
-                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Notes</Label>
-                            <Textarea value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} placeholder="Optional notes..." className="bg-background border-input rounded-sm" data-testid="prod-notes" />
-                        </div>
-                        <Button type="submit" className="w-full font-bold uppercase tracking-wider rounded-sm" disabled={submitting} data-testid="submit-production">
-                            {submitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</> : (editingId ? 'Update Entry' : 'Add Production')}
-                        </Button>
-                    </form>
+                                ) : null;
+                            })()}
+                            <FormField
+                                control={form.control}
+                                name="notes"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className={LABEL_CLASS}>Notes</FormLabel>
+                                        <FormControl>
+                                            <Textarea {...field} placeholder="Optional notes..." className="bg-background border-input rounded-sm" data-testid="prod-notes" />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <Button type="submit" className="w-full font-bold uppercase tracking-wider rounded-sm" disabled={isSubmitting} data-testid="submit-production">
+                                {isSubmitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</> : (editingId ? 'Update Entry' : 'Add Production')}
+                            </Button>
+                        </form>
+                    </Form>
                 </DialogContent>
             </Dialog>
 
@@ -299,7 +353,7 @@ const Production = () => {
                                             <td className="text-muted-foreground">{entry.updated_by || '-'}</td>
                                             <td>
                                                 <div className="flex gap-1">
-                                                    <Button variant="ghost" size="icon" onClick={() => openEdit(entry)} className="text-muted-foreground hover:text-primary"><Pencil className="w-4 h-4" /></Button>
+                                                    <Button variant="ghost" size="icon" onClick={() => openEdit(entry)} className="text-muted-foreground hover:text-primary" data-testid={'edit-production-' + entry.id}><Pencil className="w-4 h-4" /></Button>
                                                     <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(entry.id)} className="text-muted-foreground hover:text-destructive"><Trash2 className="w-4 h-4" /></Button>
                                                 </div>
                                             </td>

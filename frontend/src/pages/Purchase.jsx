@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '../components/ui/form';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import ConfirmDialog from '../components/ConfirmDialog';
 import TableSearch from '../components/TableSearch';
@@ -18,6 +20,9 @@ import { toast } from 'sonner';
 import { exportToExcel } from '../lib/exportToExcel';
 import ImportExcelButton from '../components/ImportExcelButton';
 import { getErrorMessage } from '../lib/errors';
+import { purchaseSchema } from '../lib/schemas';
+
+const LABEL_CLASS = 'text-xs font-bold uppercase tracking-widest text-muted-foreground';
 
 const PURCHASE_EXPORT_COLUMNS = [
     { header: 'Date', key: 'purchase_date', transform: (v) => formatDate(v) },
@@ -41,10 +46,14 @@ const Purchase = () => {
     const [purchases, setPurchases] = useState([]);
     const [loading, setLoading] = useState(true);
     const [dialogOpen, setDialogOpen] = useState(false);
-    const [submitting, setSubmitting] = useState(false);
     const [editingId, setEditingId] = useState(null);
-    const [formData, setFormData] = useState({ ...emptyForm });
     const [deleteTarget, setDeleteTarget] = useState(null);
+
+    const form = useForm({
+        resolver: zodResolver(purchaseSchema),
+        defaultValues: { ...emptyForm },
+    });
+    const { isSubmitting } = form.formState;
 
     // Search & filter state
     const [searchTerm, setSearchTerm] = useState('');
@@ -81,19 +90,22 @@ const Purchase = () => {
         finally { setLoading(false); }
     };
 
+    // The No. of Sheets preview updates as the operator types, so it reads the
+    // raw (still-string) field values rather than the validated output.
+    const [watchGauge, watchSize1, watchSize2, watchWeight] = form.watch(['gauge', 'size1', 'size2', 'weight']);
     const calculateSheets = () => {
-        const g = parseFloat(formData.gauge) || 0;
-        const s1 = parseFloat(formData.size1) || 0;
-        const s2 = parseFloat(formData.size2) || 0;
-        const w = parseFloat(formData.weight) || 0;
+        const g = parseFloat(watchGauge) || 0;
+        const s1 = parseFloat(watchSize1) || 0;
+        const s2 = parseFloat(watchSize2) || 0;
+        const w = parseFloat(watchWeight) || 0;
         if (g > 0 && s1 > 0 && s2 > 0 && w > 0) return Math.floor(w / ((g * s1 * s2 / 100000) * 0.785));
         return 0;
     };
 
-    const openCreate = () => { setEditingId(null); setFormData({ ...emptyForm }); setDialogOpen(true); };
+    const openCreate = () => { setEditingId(null); form.reset({ ...emptyForm }); setDialogOpen(true); };
     const openEdit = (p) => {
         setEditingId(p.id);
-        setFormData({
+        form.reset({
             gauge: String(p.gauge), size1: String(p.size1), size2: String(p.size2),
             temper: p.temper, weight: String(p.weight), supplier: p.supplier || '', invoice_number: p.invoice_number || '',
             purchase_date: p.purchase_date ? p.purchase_date.split('T')[0] : new Date().toISOString().split('T')[0],
@@ -101,24 +113,21 @@ const Purchase = () => {
         setDialogOpen(true);
     };
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        if (!formData.gauge || !formData.size1 || !formData.size2 || !formData.temper || !formData.weight) {
-            toast.error('Please fill all required fields'); return;
-        }
-        setSubmitting(true);
+    const onSubmit = async (values) => {
         try {
+            // gauge/size1/size2/weight arrive already coerced to numbers and
+            // validated as finite and > 0, which is exactly what
+            // routes/purchases.js checks before applying the sheets formula.
             const payload = {
-                gauge: parseFloat(formData.gauge), size1: parseFloat(formData.size1),
-                size2: parseFloat(formData.size2), temper: formData.temper, weight: parseFloat(formData.weight),
-                supplier: formData.supplier || null, invoice_number: formData.invoice_number || null,
-                purchase_date: new Date(formData.purchase_date).toISOString(),
+                gauge: values.gauge, size1: values.size1,
+                size2: values.size2, temper: values.temper, weight: values.weight,
+                supplier: values.supplier || null, invoice_number: values.invoice_number || null,
+                purchase_date: new Date(values.purchase_date).toISOString(),
             };
             if (editingId) { await purchaseAPI.update(editingId, payload); toast.success('Entry updated'); }
             else { await purchaseAPI.create(payload); toast.success('Entry added'); }
             setDialogOpen(false); fetchPurchases();
         } catch (err) { toast.error(getErrorMessage(err, 'Failed to save entry')); }
-        finally { setSubmitting(false); }
     };
 
     const handleDelete = async () => {
@@ -193,58 +202,132 @@ const Purchase = () => {
                             {editingId ? 'Edit Raw Material Entry' : 'Add Raw Material Entry'}
                         </DialogTitle>
                     </DialogHeader>
-                    <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-                        <div className="space-y-2">
-                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Date *</Label>
-                            <Input type="date" value={formData.purchase_date} onChange={(e) => setFormData({ ...formData, purchase_date: e.target.value })} className="bg-background border-input rounded-sm font-mono" data-testid="purchase-date" />
-                        </div>
-                        <div className="space-y-2">
-                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Gauge *</Label>
-                            <Input type="number" step="0.001" value={formData.gauge} onChange={(e) => setFormData({ ...formData, gauge: e.target.value })} placeholder="e.g., 0.22" className="bg-background border-input rounded-sm font-mono" data-testid="purchase-gauge" />
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Size 1 *</Label>
-                                <Input type="number" step="0.01" value={formData.size1} onChange={(e) => setFormData({ ...formData, size1: e.target.value })} placeholder="e.g., 914" className="bg-background border-input rounded-sm font-mono" data-testid="purchase-size1" />
+                    <Form {...form}>
+                        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 mt-4" noValidate>
+                            <FormField
+                                control={form.control}
+                                name="purchase_date"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className={LABEL_CLASS}>Date *</FormLabel>
+                                        <FormControl>
+                                            <Input {...field} type="date" className="bg-background border-input rounded-sm font-mono" data-testid="purchase-date" />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <FormField
+                                control={form.control}
+                                name="gauge"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className={LABEL_CLASS}>Gauge *</FormLabel>
+                                        <FormControl>
+                                            <Input {...field} type="number" step="0.001" min="0" placeholder="e.g., 0.22" className="bg-background border-input rounded-sm font-mono" data-testid="purchase-gauge" />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <div className="grid grid-cols-2 gap-4">
+                                <FormField
+                                    control={form.control}
+                                    name="size1"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel className={LABEL_CLASS}>Size 1 *</FormLabel>
+                                            <FormControl>
+                                                <Input {...field} type="number" step="0.01" min="0" placeholder="e.g., 914" className="bg-background border-input rounded-sm font-mono" data-testid="purchase-size1" />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={form.control}
+                                    name="size2"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel className={LABEL_CLASS}>Size 2 *</FormLabel>
+                                            <FormControl>
+                                                <Input {...field} type="number" step="0.01" min="0" placeholder="e.g., 1219" className="bg-background border-input rounded-sm font-mono" data-testid="purchase-size2" />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
                             </div>
-                            <div className="space-y-2">
-                                <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Size 2 *</Label>
-                                <Input type="number" step="0.01" value={formData.size2} onChange={(e) => setFormData({ ...formData, size2: e.target.value })} placeholder="e.g., 1219" className="bg-background border-input rounded-sm font-mono" data-testid="purchase-size2" />
+                            <div className="grid grid-cols-2 gap-4">
+                                <FormField
+                                    control={form.control}
+                                    name="temper"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel className={LABEL_CLASS}>Temper *</FormLabel>
+                                            <FormControl>
+                                                <Input {...field} placeholder="e.g., T4" className="bg-background border-input rounded-sm" data-testid="purchase-temper" />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={form.control}
+                                    name="weight"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel className={LABEL_CLASS}>Weight (kg) *</FormLabel>
+                                            <FormControl>
+                                                <Input {...field} type="number" step="0.01" min="0" placeholder="e.g., 5000" className="bg-background border-input rounded-sm font-mono" data-testid="purchase-weight" />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
                             </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Temper *</Label>
-                                <Input value={formData.temper} onChange={(e) => setFormData({ ...formData, temper: e.target.value })} placeholder="e.g., T4" className="bg-background border-input rounded-sm" data-testid="purchase-temper" />
+                            <div className="grid grid-cols-2 gap-4">
+                                <FormField
+                                    control={form.control}
+                                    name="supplier"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel className={LABEL_CLASS}>Supplier</FormLabel>
+                                            <FormControl>
+                                                <Input {...field} placeholder="Supplier name" className="bg-background border-input rounded-sm" data-testid="purchase-supplier" />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={form.control}
+                                    name="invoice_number"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel className={LABEL_CLASS}>Invoice No.</FormLabel>
+                                            <FormControl>
+                                                <Input {...field} placeholder="INV-001" className="bg-background border-input rounded-sm font-mono" data-testid="purchase-invoice" />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
                             </div>
-                            <div className="space-y-2">
-                                <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Weight (kg) *</Label>
-                                <Input type="number" step="0.01" value={formData.weight} onChange={(e) => setFormData({ ...formData, weight: e.target.value })} placeholder="e.g., 5000" className="bg-background border-input rounded-sm font-mono" data-testid="purchase-weight" />
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Supplier</Label>
-                                <Input value={formData.supplier} onChange={(e) => setFormData({ ...formData, supplier: e.target.value })} placeholder="Supplier name" className="bg-background border-input rounded-sm" data-testid="purchase-supplier" />
-                            </div>
-                            <div className="space-y-2">
-                                <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Invoice No.</Label>
-                                <Input value={formData.invoice_number} onChange={(e) => setFormData({ ...formData, invoice_number: e.target.value })} placeholder="INV-001" className="bg-background border-input rounded-sm font-mono" data-testid="purchase-invoice" />
-                            </div>
-                        </div>
-                        <div className="p-4 bg-primary/10 rounded-sm border border-primary/20">
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">No. of Sheets (Auto-Calculated)</p>
-                                    <p className="text-xs text-muted-foreground mt-1">= Weight / (Gauge x Size1 x Size2 / 100000 x 0.785)</p>
+                            <div className="p-4 bg-primary/10 rounded-sm border border-primary/20">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">No. of Sheets (Auto-Calculated)</p>
+                                        <p className="text-xs text-muted-foreground mt-1">= Weight / (Gauge x Size1 x Size2 / 100000 x 0.785)</p>
+                                    </div>
+                                    <p className="font-display text-3xl font-bold text-primary">{formatNumber(calculateSheets())}</p>
                                 </div>
-                                <p className="font-display text-3xl font-bold text-primary">{formatNumber(calculateSheets())}</p>
                             </div>
-                        </div>
-                        <Button type="submit" className="w-full font-bold uppercase tracking-wider rounded-sm" disabled={submitting} data-testid="purchase-submit">
-                            {submitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</> : (editingId ? 'Update Entry' : 'Add Entry')}
-                        </Button>
-                    </form>
+                            <Button type="submit" className="w-full font-bold uppercase tracking-wider rounded-sm" disabled={isSubmitting} data-testid="purchase-submit">
+                                {isSubmitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</> : (editingId ? 'Update Entry' : 'Add Entry')}
+                            </Button>
+                        </form>
+                    </Form>
                 </DialogContent>
             </Dialog>
 
@@ -312,7 +395,7 @@ const Purchase = () => {
                                             <td className="text-muted-foreground">{p.updated_by || '-'}</td>
                                             <td>
                                                 <div className="flex gap-1">
-                                                    <Button variant="ghost" size="icon" onClick={() => openEdit(p)} className="text-muted-foreground hover:text-primary"><Pencil className="w-4 h-4" /></Button>
+                                                    <Button variant="ghost" size="icon" onClick={() => openEdit(p)} className="text-muted-foreground hover:text-primary" data-testid={'edit-purchase-' + p.id}><Pencil className="w-4 h-4" /></Button>
                                                     <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(p.id)} className="text-muted-foreground hover:text-destructive"><Trash2 className="w-4 h-4" /></Button>
                                                 </div>
                                             </td>

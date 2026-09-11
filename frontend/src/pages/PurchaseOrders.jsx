@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useForm, useFieldArray } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '../components/ui/form';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Badge } from '../components/ui/badge';
@@ -17,10 +20,17 @@ import { purchaseOrdersAPI, brandsAPI, sizesAPI, customersAPI } from '../lib/api
 import SearchableSelect from '../components/SearchableSelect';
 import { formatDate, formatNumber, parseImportDate } from '../lib/utils';
 import { getErrorMessage } from '../lib/errors';
+import { purchaseOrderCreateSchema, purchaseOrderEditSchema, purchaseOrderItemInputSchema } from '../lib/schemas';
 import { Plus, Trash2, Pencil, ClipboardList, Loader2, AlertCircle, Download, Check, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 import { exportToExcel } from '../lib/exportToExcel';
 import ImportExcelButton from '../components/ImportExcelButton';
+
+const LABEL_CLASS = 'text-xs font-bold uppercase tracking-widest text-muted-foreground';
+
+const today = () => new Date().toISOString().split('T')[0];
+const emptyCreate = () => ({ date: today(), company_name: '', items: [] });
+const emptyItemInput = { brand_id: '', size_id: '', quantity: '' };
 
 const PO_EXPORT_COLUMNS = [
     { header: '#', key: 'id', transform: (v, row, idx) => idx + 1 },
@@ -42,21 +52,31 @@ const PurchaseOrders = () => {
     const [customers, setCustomers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [dialogOpen, setDialogOpen] = useState(false);
-    const [submitting, setSubmitting] = useState(false);
     const [editingId, setEditingId] = useState(null);
     const [deleteTarget, setDeleteTarget] = useState(null);
     const [activeTab, setActiveTab] = useState('active');
 
-    // Multi-item form state
-    const [formCompany, setFormCompany] = useState('');
-    const [formDate, setFormDate] = useState(new Date().toISOString().split('T')[0]);
-    const [currentBrandId, setCurrentBrandId] = useState('');
-    const [currentSizeId, setCurrentSizeId] = useState('');
-    const [currentQuantity, setCurrentQuantity] = useState('');
-    const [formItems, setFormItems] = useState([]);
+    // Create dialog: one customer + date, many brand/size/qty lines.
+    const createForm = useForm({
+        resolver: zodResolver(purchaseOrderCreateSchema),
+        defaultValues: emptyCreate(),
+    });
+    const { fields: formItems, append, remove, replace } = useFieldArray({ control: createForm.control, name: 'items' });
+    const watchedCompany = createForm.watch('company_name');
 
-    // Single-item edit form (for editing existing PO)
-    const [editForm, setEditForm] = useState({ company_name: '', brand_id: '', size_id: '', quantity: '', notes: '', date: '' });
+    // The staging row is its own form instance so brand/size/qty are validated
+    // on "Add" without gating the order itself. It cannot be a nested <form>
+    // element, so the Add button submits it programmatically.
+    const itemForm = useForm({
+        resolver: zodResolver(purchaseOrderItemInputSchema),
+        defaultValues: { ...emptyItemInput },
+    });
+
+    // Edit dialog: a single existing order.
+    const editForm = useForm({
+        resolver: zodResolver(purchaseOrderEditSchema),
+        defaultValues: { date: today(), company_name: '', brand_id: '', size_id: '', quantity: '', notes: '' },
+    });
 
     const [searchTerm, setSearchTerm] = useState('');
     const [dateFrom, setDateFrom] = useState('');
@@ -104,109 +124,96 @@ const PurchaseOrders = () => {
     };
 
     const resetForm = () => {
-        setFormCompany(''); setFormDate(new Date().toISOString().split('T')[0]);
-        setCurrentBrandId(''); setCurrentSizeId(''); setCurrentQuantity('');
-        setFormItems([]);
+        createForm.reset(emptyCreate());
+        itemForm.reset({ ...emptyItemInput });
     };
 
     const openCreate = () => { setEditingId(null); resetForm(); setDialogOpen(true); };
 
     const openEdit = (po) => {
         setEditingId(po.id);
-        setEditForm({
+        editForm.reset({
             company_name: po.company_name, brand_id: po.brand_id || '', size_id: po.size_id || '',
             quantity: String(po.quantity), notes: po.notes || '',
-            date: po.date ? po.date.split('T')[0] : new Date().toISOString().split('T')[0],
+            date: po.date ? po.date.split('T')[0] : today(),
         });
         setDialogOpen(true);
     };
 
-    const handleAddItem = () => {
-        if (!currentBrandId || !currentSizeId || !currentQuantity) { toast.error('Please select brand, size and enter quantity'); return; }
-        const brand = brands.find(b => b.id === currentBrandId);
-        const size = sizes.find(s => s.id === currentSizeId);
+    const handleAddItem = itemForm.handleSubmit((values) => {
+        const brand = brands.find(b => b.id === values.brand_id);
+        const size = sizes.find(s => s.id === values.size_id);
         if (!brand || !size) return;
-        setFormItems([...formItems, {
+        append({
             brand_id: brand.id, brand_name: brand.name,
             size_id: size.id, size_name: size.name,
-            quantity: parseInt(currentQuantity),
-        }]);
-        setCurrentBrandId(''); setCurrentSizeId(''); setCurrentQuantity('');
-    };
+            quantity: values.quantity,
+        });
+        itemForm.reset({ ...emptyItemInput });
+    });
 
-    const handleRemoveItem = (index) => { setFormItems(formItems.filter((_, i) => i !== index)); };
+    const handleRemoveItem = (index) => { remove(index); };
 
-    const handleSubmitCreate = async (e) => {
-        e.preventDefault();
-        if (!formCompany || formItems.length === 0) { toast.error('Please select customer and add at least one item'); return; }
-        setSubmitting(true);
-        try {
-            // Each item is its own POST, so a mid-loop failure used to leave the
-            // earlier items already persisted while the dialog still held all
-            // of them — retrying then duplicated those. Isolate each item,
-            // keep only the failures in the form, and report both counts.
-            //
-            // Requests stay sequential on purpose: the backend derives
-            // `serial_no` by reading the latest PO and incrementing, guarded
-            // only by a unique index, so firing these concurrently would
-            // produce spurious 409 "Duplicate serial number" failures.
-            // Matches the per-row loop in ImportExcelButton.
-            const failedItems = [];
-            let succeeded = 0;
-            let firstError = null;
+    const onSubmitCreate = async (values) => {
+        // Each item is its own POST, so a mid-loop failure used to leave the
+        // earlier items already persisted while the dialog still held all
+        // of them — retrying then duplicated those. Isolate each item,
+        // keep only the failures in the form, and report both counts.
+        //
+        // Requests stay sequential on purpose: the backend derives
+        // `serial_no` by reading the latest PO and incrementing, guarded
+        // only by a unique index, so firing these concurrently would
+        // produce spurious 409 "Duplicate serial number" failures.
+        // Matches the per-row loop in ImportExcelButton.
+        const failedItems = [];
+        let succeeded = 0;
+        let firstError = null;
 
-            for (const item of formItems) {
-                try {
-                    await purchaseOrdersAPI.create({
-                        date: new Date(formDate).toISOString(),
-                        company_name: formCompany,
-                        brand_id: item.brand_id, brand_name: item.brand_name,
-                        size_id: item.size_id, size_name: item.size_name,
-                        quantity: item.quantity,
-                    });
-                    succeeded += 1;
-                } catch (err) {
-                    failedItems.push(item);
-                    if (!firstError) firstError = err;
-                }
+        for (const item of values.items) {
+            try {
+                await purchaseOrdersAPI.create({
+                    date: new Date(values.date).toISOString(),
+                    company_name: values.company_name,
+                    brand_id: item.brand_id, brand_name: item.brand_name,
+                    size_id: item.size_id, size_name: item.size_name,
+                    quantity: item.quantity,
+                });
+                succeeded += 1;
+            } catch (err) {
+                failedItems.push(item);
+                if (!firstError) firstError = err;
             }
-
-            const failed = failedItems.length;
-            if (succeeded > 0) toast.success(`${succeeded} purchase order(s) created`);
-            if (failed > 0) toast.error(`${failed} purchase order(s) failed: ${getErrorMessage(firstError, 'Failed to create orders')}`);
-
-            fetchData();
-            if (failed === 0) {
-                setDialogOpen(false);
-                resetForm();
-            } else {
-                // Leave the dialog open with only the items still to be created.
-                setFormItems(failedItems);
-            }
-        } finally { setSubmitting(false); }
-    };
-
-    const handleSubmitEdit = async (e) => {
-        e.preventDefault();
-        if (!editForm.company_name || !editForm.brand_id || !editForm.size_id || !editForm.quantity) {
-            toast.error('Please fill all required fields'); return;
         }
-        setSubmitting(true);
+
+        const failed = failedItems.length;
+        if (succeeded > 0) toast.success(`${succeeded} purchase order(s) created`);
+        if (failed > 0) toast.error(`${failed} purchase order(s) failed: ${getErrorMessage(firstError, 'Failed to create orders')}`);
+
+        fetchData();
+        if (failed === 0) {
+            setDialogOpen(false);
+            resetForm();
+        } else {
+            // Leave the dialog open with only the items still to be created.
+            replace(failedItems);
+        }
+    };
+
+    const onSubmitEdit = async (values) => {
         try {
-            const brand = brands.find(b => b.id === editForm.brand_id);
-            const size = sizes.find(s => s.id === editForm.size_id);
+            const brand = brands.find(b => b.id === values.brand_id);
+            const size = sizes.find(s => s.id === values.size_id);
             await purchaseOrdersAPI.update(editingId, {
-                date: new Date(editForm.date).toISOString(),
-                company_name: editForm.company_name,
-                brand_id: editForm.brand_id, brand_name: brand?.name || '',
-                size_id: editForm.size_id, size_name: size?.name || '',
-                quantity: parseInt(editForm.quantity),
-                notes: editForm.notes || null,
+                date: new Date(values.date).toISOString(),
+                company_name: values.company_name,
+                brand_id: values.brand_id, brand_name: brand?.name || '',
+                size_id: values.size_id, size_name: size?.name || '',
+                quantity: values.quantity,
+                notes: values.notes || null,
             });
             toast.success('Order updated');
             setDialogOpen(false); fetchData();
         } catch (err) { toast.error(getErrorMessage(err, 'Failed to save order')); }
-        finally { setSubmitting(false); }
     };
 
     const handleDelete = async () => {
@@ -287,60 +294,118 @@ const PurchaseOrders = () => {
                     <DialogHeader>
                         <DialogTitle className="font-display text-xl font-bold tracking-tight uppercase">New Purchase Order</DialogTitle>
                     </DialogHeader>
-                    <form onSubmit={handleSubmitCreate} className="space-y-4 mt-4">
-                        <div className="space-y-2">
-                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Date *</Label>
-                            <Input type="date" value={formDate} onChange={(e) => setFormDate(e.target.value)} className="bg-background border-input rounded-sm font-mono" data-testid="po-date" />
-                        </div>
-                        <div className="space-y-2">
-                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Customer *</Label>
-                            <SearchableSelect
-                                options={customers.map(c => ({ value: c.name, label: c.name }))}
-                                value={formCompany}
-                                onValueChange={setFormCompany}
-                                placeholder="Select customer"
-                                searchPlaceholder="Search customers..."
-                                data-testid="po-company"
+                    <Form {...createForm}>
+                        <form onSubmit={createForm.handleSubmit(onSubmitCreate)} className="space-y-4 mt-4" noValidate>
+                            <FormField
+                                control={createForm.control}
+                                name="date"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className={LABEL_CLASS}>Date *</FormLabel>
+                                        <FormControl>
+                                            <Input {...field} type="date" className="bg-background border-input rounded-sm font-mono" data-testid="po-date" />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
                             />
-                        </div>
-                        <div className="border-t border-border pt-4"><Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Add Items (Brand, Size, Qty)</Label></div>
-                        <div className="grid grid-cols-4 gap-2">
-                            <Select value={currentBrandId} onValueChange={setCurrentBrandId}>
-                                <SelectTrigger className="bg-background border-input rounded-sm" data-testid="po-brand"><SelectValue placeholder="Brand" /></SelectTrigger>
-                                <SelectContent className="bg-card border-border rounded-sm max-h-60">{brands.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
-                            </Select>
-                            <Select value={currentSizeId} onValueChange={setCurrentSizeId}>
-                                <SelectTrigger className="bg-background border-input rounded-sm" data-testid="po-size"><SelectValue placeholder="Size" /></SelectTrigger>
-                                <SelectContent className="bg-card border-border rounded-sm">{sizes.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
-                            </Select>
-                            <Input type="number" value={currentQuantity} onChange={(e) => setCurrentQuantity(e.target.value)} placeholder="Qty" className="bg-background border-input rounded-sm font-mono" data-testid="po-quantity" />
-                            <Button type="button" onClick={handleAddItem} className="rounded-sm" data-testid="add-po-item-btn"><Plus className="w-4 h-4 mr-1" /> Add</Button>
-                        </div>
-                        {formItems.length > 0 && (
-                            <div className="space-y-2">
-                                <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Items ({formItems.length})</Label>
-                                <div className="space-y-1 max-h-40 overflow-y-auto">
-                                    {formItems.map((item, idx) => (
-                                        <div key={idx} className="flex items-center justify-between p-2 bg-secondary/50 rounded-sm">
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-sm font-medium">{item.brand_name}</span>
-                                                <Badge variant="outline">{item.size_name}</Badge>
-                                                <Badge variant="secondary" className="font-mono">{formatNumber(item.quantity)} qty</Badge>
+                            <FormField
+                                control={createForm.control}
+                                name="company_name"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className={LABEL_CLASS}>Customer *</FormLabel>
+                                        <SearchableSelect
+                                            options={customers.map(c => ({ value: c.name, label: c.name }))}
+                                            value={field.value}
+                                            onValueChange={field.onChange}
+                                            placeholder="Select customer"
+                                            searchPlaceholder="Search customers..."
+                                            data-testid="po-company"
+                                        />
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <div className="border-t border-border pt-4"><Label className={LABEL_CLASS}>Add Items (Brand, Size, Qty)</Label></div>
+                            {/* The staging row validates on its own form instance; it needs
+                                its own provider so FormMessage can find those errors. */}
+                            <Form {...itemForm}>
+                                <div className="grid grid-cols-4 gap-2">
+                                    <FormField
+                                        control={itemForm.control}
+                                        name="brand_id"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <Select value={field.value} onValueChange={field.onChange}>
+                                                    <FormControl>
+                                                        <SelectTrigger className="bg-background border-input rounded-sm" data-testid="po-brand"><SelectValue placeholder="Brand" /></SelectTrigger>
+                                                    </FormControl>
+                                                    <SelectContent className="bg-card border-border rounded-sm max-h-60">{brands.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
+                                                </Select>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={itemForm.control}
+                                        name="size_id"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <Select value={field.value} onValueChange={field.onChange}>
+                                                    <FormControl>
+                                                        <SelectTrigger className="bg-background border-input rounded-sm" data-testid="po-size"><SelectValue placeholder="Size" /></SelectTrigger>
+                                                    </FormControl>
+                                                    <SelectContent className="bg-card border-border rounded-sm">{sizes.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+                                                </Select>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={itemForm.control}
+                                        name="quantity"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormControl>
+                                                    <Input {...field} type="number" min="1" placeholder="Qty" className="bg-background border-input rounded-sm font-mono" data-testid="po-quantity" />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <Button type="button" onClick={handleAddItem} className="rounded-sm" data-testid="add-po-item-btn"><Plus className="w-4 h-4 mr-1" /> Add</Button>
+                                </div>
+                            </Form>
+                            {formItems.length > 0 && (
+                                <div className="space-y-2">
+                                    <Label className={LABEL_CLASS}>Items ({formItems.length})</Label>
+                                    <div className="space-y-1 max-h-40 overflow-y-auto">
+                                        {formItems.map((item, idx) => (
+                                            <div key={item.id} className="flex items-center justify-between p-2 bg-secondary/50 rounded-sm">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-sm font-medium">{item.brand_name}</span>
+                                                    <Badge variant="outline">{item.size_name}</Badge>
+                                                    <Badge variant="secondary" className="font-mono">{formatNumber(item.quantity)} qty</Badge>
+                                                </div>
+                                                <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => handleRemoveItem(idx)} data-testid={'remove-po-item-' + idx}><Trash2 className="w-3 h-3" /></Button>
                                             </div>
-                                            <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => handleRemoveItem(idx)}><Trash2 className="w-3 h-3" /></Button>
-                                        </div>
-                                    ))}
+                                        ))}
+                                    </div>
+                                    <div className="flex justify-between text-sm p-2 bg-success/10 rounded-sm border border-success/20">
+                                        <span className="font-bold uppercase tracking-wider">Total Quantity</span>
+                                        <span className="font-mono font-bold text-success">{formatNumber(formItems.reduce((sum, i) => sum + (i.quantity || 0), 0))}</span>
+                                    </div>
                                 </div>
-                                <div className="flex justify-between text-sm p-2 bg-success/10 rounded-sm border border-success/20">
-                                    <span className="font-bold uppercase tracking-wider">Total Quantity</span>
-                                    <span className="font-mono font-bold text-success">{formatNumber(formItems.reduce((sum, i) => sum + (i.quantity || 0), 0))}</span>
-                                </div>
-                            </div>
-                        )}
-                        <Button type="submit" className="w-full font-bold uppercase tracking-wider rounded-sm" disabled={submitting || formItems.length === 0 || !formCompany} data-testid="submit-po-create">
-                            {submitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Creating...</> : `Create ${formItems.length} Order(s)`}
-                        </Button>
-                    </form>
+                            )}
+                            {createForm.formState.errors.items?.message && (
+                                <p className="text-[0.8rem] font-medium text-destructive">{createForm.formState.errors.items.message}</p>
+                            )}
+                            <Button type="submit" className="w-full font-bold uppercase tracking-wider rounded-sm" disabled={createForm.formState.isSubmitting || formItems.length === 0 || !watchedCompany} data-testid="submit-po-create">
+                                {createForm.formState.isSubmitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Creating...</> : `Create ${formItems.length} Order(s)`}
+                            </Button>
+                        </form>
+                    </Form>
                 </DialogContent>
             </Dialog>
 
@@ -350,45 +415,91 @@ const PurchaseOrders = () => {
                     <DialogHeader>
                         <DialogTitle className="font-display text-xl font-bold tracking-tight uppercase">Edit Purchase Order</DialogTitle>
                     </DialogHeader>
-                    <form onSubmit={handleSubmitEdit} className="space-y-4 mt-4">
-                        <div className="space-y-2">
-                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Date *</Label>
-                            <Input type="date" value={editForm.date} onChange={(e) => setEditForm({ ...editForm, date: e.target.value })} className="bg-background border-input rounded-sm font-mono" />
-                        </div>
-                        <div className="space-y-2">
-                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Customer *</Label>
-                            <SearchableSelect
-                                options={customers.map(c => ({ value: c.name, label: c.name }))}
-                                value={editForm.company_name}
-                                onValueChange={(v) => setEditForm({ ...editForm, company_name: v })}
-                                placeholder="Select customer"
-                                searchPlaceholder="Search customers..."
+                    <Form {...editForm}>
+                        <form onSubmit={editForm.handleSubmit(onSubmitEdit)} className="space-y-4 mt-4" noValidate>
+                            <FormField
+                                control={editForm.control}
+                                name="date"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className={LABEL_CLASS}>Date *</FormLabel>
+                                        <FormControl>
+                                            <Input {...field} type="date" className="bg-background border-input rounded-sm font-mono" data-testid="po-edit-date" />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
                             />
-                        </div>
-                        <div className="space-y-2">
-                            <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Brand *</Label>
-                            <Select value={editForm.brand_id} onValueChange={(v) => setEditForm({ ...editForm, brand_id: v })}>
-                                <SelectTrigger className="bg-background border-input rounded-sm"><SelectValue placeholder="Select brand" /></SelectTrigger>
-                                <SelectContent className="bg-card border-border rounded-sm max-h-60">{brands.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
-                            </Select>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Size *</Label>
-                                <Select value={editForm.size_id} onValueChange={(v) => setEditForm({ ...editForm, size_id: v })}>
-                                    <SelectTrigger className="bg-background border-input rounded-sm"><SelectValue placeholder="Select" /></SelectTrigger>
-                                    <SelectContent className="bg-card border-border rounded-sm">{sizes.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
-                                </Select>
+                            <FormField
+                                control={editForm.control}
+                                name="company_name"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className={LABEL_CLASS}>Customer *</FormLabel>
+                                        <SearchableSelect
+                                            options={customers.map(c => ({ value: c.name, label: c.name }))}
+                                            value={field.value}
+                                            onValueChange={field.onChange}
+                                            placeholder="Select customer"
+                                            searchPlaceholder="Search customers..."
+                                            data-testid="po-edit-company"
+                                        />
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <FormField
+                                control={editForm.control}
+                                name="brand_id"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel className={LABEL_CLASS}>Brand *</FormLabel>
+                                        <Select value={field.value} onValueChange={field.onChange}>
+                                            <FormControl>
+                                                <SelectTrigger className="bg-background border-input rounded-sm" data-testid="po-edit-brand"><SelectValue placeholder="Select brand" /></SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent className="bg-card border-border rounded-sm max-h-60">{brands.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
+                                        </Select>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                            <div className="grid grid-cols-2 gap-4">
+                                <FormField
+                                    control={editForm.control}
+                                    name="size_id"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel className={LABEL_CLASS}>Size *</FormLabel>
+                                            <Select value={field.value} onValueChange={field.onChange}>
+                                                <FormControl>
+                                                    <SelectTrigger className="bg-background border-input rounded-sm" data-testid="po-edit-size"><SelectValue placeholder="Select" /></SelectTrigger>
+                                                </FormControl>
+                                                <SelectContent className="bg-card border-border rounded-sm">{sizes.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
+                                            </Select>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={editForm.control}
+                                    name="quantity"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel className={LABEL_CLASS}>Quantity *</FormLabel>
+                                            <FormControl>
+                                                <Input {...field} type="number" min="1" placeholder="0" className="bg-background border-input rounded-sm font-mono" data-testid="po-edit-quantity" />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
                             </div>
-                            <div className="space-y-2">
-                                <Label className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Quantity *</Label>
-                                <Input type="number" value={editForm.quantity} onChange={(e) => setEditForm({ ...editForm, quantity: e.target.value })} placeholder="0" className="bg-background border-input rounded-sm font-mono" />
-                            </div>
-                        </div>
-                        <Button type="submit" className="w-full font-bold uppercase tracking-wider rounded-sm" disabled={submitting}>
-                            {submitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</> : 'Update Order'}
-                        </Button>
-                    </form>
+                            <Button type="submit" className="w-full font-bold uppercase tracking-wider rounded-sm" disabled={editForm.formState.isSubmitting} data-testid="submit-po-edit">
+                                {editForm.formState.isSubmitting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</> : 'Update Order'}
+                            </Button>
+                        </form>
+                    </Form>
                 </DialogContent>
             </Dialog>
 
@@ -479,7 +590,7 @@ const PurchaseOrders = () => {
                                                             {po.is_completed ? <RotateCcw className="w-4 h-4" /> : <Check className="w-4 h-4" />}
                                                         </Button>
                                                         {!po.is_completed && (
-                                                            <Button variant="ghost" size="icon" onClick={() => openEdit(po)} className="text-muted-foreground hover:text-primary"><Pencil className="w-4 h-4" /></Button>
+                                                            <Button variant="ghost" size="icon" onClick={() => openEdit(po)} className="text-muted-foreground hover:text-primary" data-testid={'edit-po-' + po.id}><Pencil className="w-4 h-4" /></Button>
                                                         )}
                                                         <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(po.id)} className="text-muted-foreground hover:text-destructive"><Trash2 className="w-4 h-4" /></Button>
                                                     </div>
