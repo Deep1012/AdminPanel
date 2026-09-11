@@ -1,4 +1,5 @@
 const express = require("express");
+const crypto = require("crypto");
 const { v4: uuidv4 } = require("uuid");
 const Backup = require("../models/Backup");
 const Purchase = require("../models/Purchase");
@@ -75,19 +76,32 @@ async function createBackup(triggerUser) {
   return backup;
 }
 
-// POST /api/backups/cron - Vercel Cron monthly backup endpoint
-router.post("/cron", async (req, res) => {
+// Vercel Cron monthly backup endpoint.
+// Registered for GET and POST: Vercel Cron issues GET, but the schedule was
+// originally wired to POST, so accept both rather than depend on the platform.
+async function cronBackupHandler(req, res) {
   try {
-    const authHeader = req.headers.authorization;
-    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    // Fail closed: an unset CRON_SECRET must never make the endpoint public.
+    if (!process.env.CRON_SECRET) {
+      console.error("[CRON] CRON_SECRET is not configured; refusing to run backup");
+      return res.status(500).json({ detail: "Server misconfigured" });
+    }
+
+    const expected = Buffer.from(`Bearer ${process.env.CRON_SECRET}`);
+    const provided = Buffer.from(req.headers.authorization || "");
+    if (expected.length !== provided.length || !crypto.timingSafeEqual(expected, provided)) {
       return res.status(401).json({ detail: "Unauthorized" });
     }
+
     const backup = await createBackup(null);
     res.json({ message: "Monthly backup created", id: backup.id, size_bytes: backup.size_bytes });
   } catch (error) {
     res.status(500).json({ detail: error.message });
   }
-});
+}
+
+router.get("/cron", cronBackupHandler);
+router.post("/cron", cronBackupHandler);
 
 // GET /api/backups - list all backups (without full data)
 router.get("/", authenticate, adminRequired, async (req, res) => {

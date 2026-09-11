@@ -3,14 +3,23 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const { v4: uuidv4 } = require("uuid");
 const User = require("../models/User");
-const { authenticate } = require("../middleware/auth");
+const { authenticate, adminRequired } = require("../middleware/auth");
 const { logActivity } = require("../lib/activityLogger");
 
 const router = express.Router();
 
-router.post("/register", async (req, res) => {
+const ALLOWED_ROLES = ["admin", "user"];
+
+router.post("/register", authenticate, adminRequired, async (req, res) => {
   try {
     const { username, email, password, role = "user" } = req.body;
+
+    if (typeof email !== "string" || typeof password !== "string" || typeof username !== "string") {
+      return res.status(400).json({ detail: "username, email and password must be strings" });
+    }
+    if (!ALLOWED_ROLES.includes(role)) {
+      return res.status(400).json({ detail: `role must be one of: ${ALLOWED_ROLES.join(", ")}` });
+    }
 
     const existing = await User.findOne({ email }).lean();
     if (existing) {
