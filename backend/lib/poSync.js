@@ -56,7 +56,7 @@ function normalizeDeltas(deltas) {
  *
  * Negative deltas are deliberately NOT rejected for under-running
  * `quantity_dispatched`: a dispatch reversal must never be blocked by drifted
- * counters, so the floor is enforced at write time by `applyPoDeltas` instead.
+ * counters, so the floor is enforced at write time by `applyPoDeltasGuarded` instead.
  *
  * @param {Map<string, number>|Record<string, number>} deltas
  * @param {{model?: import("mongoose").Model}} [options] - `model` is injectable for tests.
@@ -83,51 +83,6 @@ async function assertPoCapacity(deltas, { model = DefaultPurchaseOrder } = {}) {
     }
   }
 }
-
-/**
- * Apply the deltas to each PO's `quantity_dispatched`.
- *
- * SUPERSEDED at every call site by `applyPoDeltasGuarded`, which adds the
- * capacity check to the write itself and compensates a part-applied set. This
- * unguarded version is kept only for a caller that has already established
- * capacity some other way; new code should not reach for it.
- *
- * Uses a pipeline-form update so the sum and the `>= 0` clamp are evaluated
- * server-side in one atomic step; a plain `$inc` can leave the counter
- * negative when a reversal is larger than what was recorded.
- *
- * Call `assertPoCapacity` first — this function does not validate capacity.
- *
- * @param {Map<string, number>|Record<string, number>} deltas
- * @param {{model?: import("mongoose").Model}} [options]
- * @returns {Promise<{applied: string[], missing: string[]}>}
- */
-async function applyPoDeltas(deltas, { model = DefaultPurchaseOrder } = {}) {
-  const entries = normalizeDeltas(deltas);
-  const applied = [];
-  const missing = [];
-
-  for (const [poId, delta] of entries) {
-    const result = await model.updateOne({ id: poId }, [
-      {
-        $set: {
-          quantity_dispatched: {
-            $max: [0, { $add: [{ $ifNull: ["$quantity_dispatched", 0] }, delta] }],
-          },
-        },
-      },
-    ]);
-
-    if (result && result.matchedCount === 0) {
-      missing.push(poId);
-    } else {
-      applied.push(poId);
-    }
-  }
-
-  return { applied, missing };
-}
-
 
 /**
  * Filter matching a PO only if adding `delta` to `quantity_dispatched` keeps
@@ -171,7 +126,8 @@ async function addClamped(model, poId, delta) {
  * Apply net PO deltas with the capacity check inside each write, rolling back
  * everything already applied if any single write cannot be satisfied.
  *
- * Differences from `applyPoDeltas`, which it supersedes at the call sites:
+ * Differences from the unguarded version it replaced (removed once no call
+ * site used it):
  *   - positive deltas go through `capacityFilter`, so a concurrent dispatch
  *     cannot squeeze past the pre-check and over-allocate the PO;
  *   - a failure part-way through is compensated rather than left half-applied.
@@ -180,7 +136,7 @@ async function addClamped(model, poId, delta) {
  * once (normalizeDeltas guarantees it), so this does not change which claims
  * fit; it makes the write order deterministic rather than dependent on object
  * key order, and keeps the number of outstanding claims to roll back as small
- * as possible when a later claim fails. Negative deltas keep `applyPoDeltas`'s `$max: [0, ...]` clamp: a reversal
+ * as possible when a later claim fails. Negative deltas use a `$max: [0, ...]` clamp: a reversal
  * larger than what was recorded lands at 0 instead of going negative. That is
  * a deliberate change from the raw `$inc` the route used to do — a negative
  * `quantity_dispatched` reads as *extra* capacity and silently authorises
@@ -325,7 +281,6 @@ async function unlinkPoFromDispatches(poId, { model } = {}) {
 module.exports = {
   normalizeDeltas,
   assertPoCapacity,
-  applyPoDeltas,
   applyPoDeltasGuarded,
   revertPoDeltas,
   unlinkPoFromDispatches,

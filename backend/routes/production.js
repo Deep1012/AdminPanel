@@ -9,6 +9,7 @@ const { logActivity } = require("../lib/activityLogger");
 const { printingAvailability, availableFor } = require("../lib/availability");
 const { toNumber } = require("../lib/stock");
 const { buildProductionListQuery, fetchProductionList } = require("../lib/productionList");
+const { findInvalidProductionInput, productionEditShortage, cascadeUpdateFor } = require("../lib/productionEdit");
 
 const CASCADING_BRAND_NAMES = ["BOTTOM", "TOP", "LID"];
 const LWBF_CASCADING_BRAND_NAMES = ["BOTTOM LWBF", "LID LWBF"];
@@ -19,6 +20,8 @@ const router = express.Router();
 router.post("/", authenticate, async (req, res, next) => {
   try {
     const { brand_id, brand_name, size_id, size_name, quantity_produced, printing_stock_used = 0, printing_job_id, notes, production_date } = req.body;
+    const invalid = findInvalidProductionInput(req.body, { requireQuantity: true });
+    if (invalid) return res.status(400).json({ detail: invalid });
     const id = uuidv4();
     const now = production_date || new Date().toISOString();
 
@@ -175,15 +178,37 @@ router.get("/", authenticate, async (req, res, next) => {
   }
 });
 
-// KNOWN GAP: this handler does not re-check Available Printing Stock when an
-// edit raises printing_stock_used. The POST guard is the one this phase adds;
-// extending it here needs the same net-delta treatment the dispatch PUT got,
-// plus a decision about what to do with the cascade children whose
-// printing_stock_used is rewritten below. GET /api/admin/reconcile surfaces
-// the resulting drift in the meantime.
+// Editing re-checks Available Printing Stock the same way create does, net of
+// the entry's own current consumption (lib/productionEdit.js), and applies the
+// same policy — currently report-not-reject, see lib/availabilityPolicy.js.
+// Like the create check it is read-then-write rather than atomic: available
+// printing stock aggregates two collections and has no counter to guard.
 router.put("/:prodId", authenticate, async (req, res, next) => {
   try {
     const { brand_id, brand_name, size_id, size_name, quantity_produced, printing_stock_used, notes, production_date } = req.body;
+
+    const invalid = findInvalidProductionInput(req.body);
+    if (invalid) return res.status(400).json({ detail: invalid });
+
+    const existing = await Production.findOne(
+      { id: req.params.prodId },
+      { _id: 0, id: 1, size_name: 1, brand_name: 1, printing_stock_used: 1 }
+    ).lean();
+    if (!existing) return res.status(404).json({ detail: "Production entry not found" });
+
+    const touchesStock = printing_stock_used !== undefined || brand_name !== undefined || size_name !== undefined;
+    if (touchesStock) {
+      const [jobs, productions] = await Promise.all([
+        PrintingJob.find({}, { sizes: 1, sheets_from_material: 1, _id: 0 }).lean(),
+        Production.find({}, { id: 1, size_name: 1, brand_name: 1, printing_stock_used: 1, _id: 0 }).lean(),
+      ]);
+      const shortage = productionEditShortage({ existing, updates: req.body, jobs, productions });
+      if (shortage) {
+        const decision = applyAvailabilityPolicy(shortage);
+        if (decision.reject) return res.status(400).json({ detail: decision.detail });
+      }
+    }
+
     const updateData = {
       updated_by: req.user.username,
       updated_at: new Date().toISOString(),
@@ -200,16 +225,8 @@ router.put("/:prodId", authenticate, async (req, res, next) => {
     const result = await Production.updateOne({ id: req.params.prodId }, { $set: updateData });
     if (result.matchedCount === 0) return res.status(404).json({ detail: "Production entry not found" });
 
-    // Also update cascaded entries if quantity/size changed
-    const cascadeUpdate = {};
-    if (quantity_produced !== undefined) {
-      cascadeUpdate.quantity_produced = quantity_produced;
-      cascadeUpdate.printing_stock_used = printing_stock_used ?? quantity_produced;
-    }
-    if (size_id !== undefined) cascadeUpdate.size_id = size_id;
-    if (size_name !== undefined) cascadeUpdate.size_name = size_name;
-    if (production_date !== undefined) cascadeUpdate.production_date = production_date;
-    if (Object.keys(cascadeUpdate).length > 0) {
+    const cascadeUpdate = cascadeUpdateFor(req.body);
+    if (cascadeUpdate) {
       await Production.updateMany({ parent_production_id: req.params.prodId }, { $set: cascadeUpdate });
     }
 

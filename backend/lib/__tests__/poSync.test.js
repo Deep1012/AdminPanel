@@ -1,7 +1,6 @@
 const {
   normalizeDeltas,
   assertPoCapacity,
-  applyPoDeltas,
   PoSyncError,
 } = require("../poSync");
 
@@ -146,50 +145,3 @@ describe("assertPoCapacity", () => {
   });
 });
 
-describe("applyPoDeltas", () => {
-  it("issues one update per non-zero delta", async () => {
-    const model = fakePoModel({ "po-1": PO(), "po-2": PO({ id: "po-2" }) });
-    await applyPoDeltas({ "po-1": 10, "po-2": -4, "po-3": 0 }, { model });
-
-    expect(model.calls.updateOne).toHaveLength(2);
-    expect(model.calls.updateOne.map((c) => c.filter.id)).toEqual(["po-1", "po-2"]);
-  });
-
-  it("does nothing for an empty delta set", async () => {
-    const model = fakePoModel({ "po-1": PO() });
-    await applyPoDeltas({}, { model });
-    expect(model.calls.updateOne).toHaveLength(0);
-  });
-
-  it("clamps quantity_dispatched at 0 so a reversal cannot drive it negative", async () => {
-    const model = fakePoModel({ "po-1": PO() });
-    await applyPoDeltas({ "po-1": -999 }, { model });
-
-    const [{ update }] = model.calls.updateOne;
-    // Pipeline-form update keeps the clamp atomic and server-side.
-    expect(Array.isArray(update)).toBe(true);
-    expect(JSON.stringify(update)).toContain("$max");
-    expect(JSON.stringify(update)).toContain("quantity_dispatched");
-  });
-
-  it("reports which POs were updated and which were missing", async () => {
-    const model = fakePoModel({ "po-1": PO() });
-    const result = await applyPoDeltas({ "po-1": 5, "po-ghost": 5 }, { model });
-
-    expect(result).toEqual({ applied: ["po-1"], missing: ["po-ghost"] });
-  });
-
-  it("accepts a Map as well as a plain object", async () => {
-    const model = fakePoModel({ "po-1": PO() });
-    await applyPoDeltas(new Map([["po-1", 3]]), { model });
-    expect(model.calls.updateOne).toHaveLength(1);
-  });
-
-  it("does not mutate its input", async () => {
-    const model = fakePoModel({ "po-1": PO() });
-    const input = { "po-1": 5 };
-    const snapshot = { ...input };
-    await applyPoDeltas(input, { model });
-    expect(input).toEqual(snapshot);
-  });
-});
