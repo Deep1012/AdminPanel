@@ -167,7 +167,7 @@ const Sizes = () => {
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="data-table" data-testid="sizes-table">
-                                <thead><tr><th>#</th><th>Name</th><th>Created</th><th></th></tr></thead>
+                                <thead><tr><th>#</th><th>Name</th><th>Created</th><th><span className="sr-only">Actions</span></th></tr></thead>
                                 <tbody>
                                     {paginatedSizes.map((size, idx) => (
                                         <tr key={size.id} data-testid={`size-row-${size.id}`}>

@@ -237,7 +237,7 @@ const MenuManagement = () => {
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="data-table">
-                                <thead><tr><th>#</th><th>Icon</th><th>Label</th><th>Path</th><th>Admin Only</th><th>System</th><th></th></tr></thead>
+                                <thead><tr><th>#</th><th>Icon</th><th>Label</th><th>Path</th><th>Admin Only</th><th>System</th><th><span className="sr-only">Actions</span></th></tr></thead>
                                 <tbody>
                                     {items.map((item, idx) => {
                                         const Icon = getIcon(item.icon);

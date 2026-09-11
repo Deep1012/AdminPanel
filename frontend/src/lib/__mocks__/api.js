@@ -21,7 +21,7 @@ export const productionAPI = client('getAll', 'create', 'update', 'delete');
 export const dispatchAPI = client('getAll', 'create', 'update', 'delete');
 export const purchaseOrdersAPI = client('getAll', 'create', 'update', 'delete', 'toggleComplete');
 export const customersAPI = client('getAll', 'create', 'update', 'delete');
-export const adminAPI = client('clearOperationalData', 'getActivityLogs', 'getActivityLogStats');
+export const adminAPI = client('clearOperationalData', 'getActivityLogs', 'getActivityLogStats', 'reconcile');
 export const menuItemsAPI = client('getAll', 'create', 'update', 'delete', 'reorder', 'seedDefaults');
 export const dashboardAPI = client(
     'getStats',

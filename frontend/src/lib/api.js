@@ -113,6 +113,14 @@ export const adminAPI = {
     clearOperationalData: () => mutating(() => api.post('/admin/clear-operational-data'), Object.values(CACHE_KEYS)),
     getActivityLogs: (params) => api.get('/admin/activity-logs', { params }),
     getActivityLogStats: () => api.get('/admin/activity-logs/stats'),
+    // Read-only stock reconciliation. Deliberately NOT cached: it exists to
+    // report the data as it is right now. `sampleLimit` (server clamps to
+    // 1..200, default 50) caps the rows returned per check; counts are always
+    // complete. Omit it to take the server default.
+    reconcile: (sampleLimit) => api.get(
+        '/admin/reconcile',
+        sampleLimit === undefined ? undefined : { params: { sample_limit: sampleLimit } }
+    ),
 };
 
 export const menuItemsAPI = {

@@ -515,7 +515,7 @@ const Production = () => {
                                     <SortableHeader label="Brand" sortKey="brand_name" currentSortKey={sortKey} currentSortDir={sortDir} onSort={requestSort} />
                                     <SortableHeader label="Printing Used" sortKey="printing_stock_used" currentSortKey={sortKey} currentSortDir={sortDir} onSort={requestSort} />
                                     <SortableHeader label="Qty Produced" sortKey="quantity_produced" currentSortKey={sortKey} currentSortDir={sortDir} onSort={requestSort} />
-                                    <th>Notes</th><th>By</th><th>Updated By</th><th></th></tr></thead>
+                                    <th>Notes</th><th>By</th><th>Updated By</th><th><span className="sr-only">Actions</span></th></tr></thead>
                                 <tbody>
                                     {production.map((entry, idx) => (
                                         <tr key={entry.id} data-testid={`production-row-${entry.id}`}>

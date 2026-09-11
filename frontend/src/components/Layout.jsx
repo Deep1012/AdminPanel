@@ -13,9 +13,10 @@ import {
     DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
     DropdownMenuSeparator, DropdownMenuTrigger
 } from './ui/dropdown-menu';
+// Nav icons are resolved by name through getIcon (lib/iconMap), so only the
+// icons this shell renders directly are imported here.
 import {
-    LayoutDashboard, ShoppingCart, ClipboardList, Printer, Factory, Truck,
-    Settings, Tag, Ruler, LogOut, Menu, X, Package, User, Users, Layers,
+    LogOut, Menu, X, Package, User,
     ChevronLeft, ChevronRight, ChevronDown, Download, Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -148,11 +149,17 @@ export const Layout = ({ children }) => {
 
     return (
         <div className="min-h-screen bg-background flex" data-testid="main-layout">
-            {/* Mobile sidebar backdrop */}
+            {/* Mobile sidebar backdrop: a pointer-only convenience. It is
+                presentational and hidden from assistive tech because the
+                keyboard/screen-reader way to close the drawer is the
+                mobile-menu-btn toggle, which carries aria-expanded. */}
             {mobileOpen && (
                 <div
+                    role="presentation"
+                    aria-hidden="true"
                     className="fixed inset-0 bg-black/50 z-40 lg:hidden"
                     onClick={() => setMobileOpen(false)}
+                    data-testid="mobile-sidebar-backdrop"
                 />
             )}
 

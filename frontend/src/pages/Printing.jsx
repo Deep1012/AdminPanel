@@ -372,7 +372,7 @@ const Printing = () => {
                                             <FormItem>
                                                 <Select value={field.value} onValueChange={field.onChange}>
                                                     <FormControl>
-                                                        <SelectTrigger className="bg-background border-input rounded-sm" data-testid="container-size"><SelectValue placeholder="Size" /></SelectTrigger>
+                                                        <SelectTrigger aria-label="Size" className="bg-background border-input rounded-sm" data-testid="container-size"><SelectValue placeholder="Size" /></SelectTrigger>
                                                     </FormControl>
                                                     <SelectContent className="bg-card border-border rounded-sm">{sizes.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
                                                 </Select>
@@ -387,7 +387,7 @@ const Printing = () => {
                                             <FormItem>
                                                 <Select value={field.value} onValueChange={field.onChange}>
                                                     <FormControl>
-                                                        <SelectTrigger className="bg-background border-input rounded-sm" data-testid="brand-select"><SelectValue placeholder="Brand" /></SelectTrigger>
+                                                        <SelectTrigger aria-label="Brand" className="bg-background border-input rounded-sm" data-testid="brand-select"><SelectValue placeholder="Brand" /></SelectTrigger>
                                                     </FormControl>
                                                     <SelectContent className="bg-card border-border rounded-sm max-h-60">{brands.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
                                                 </Select>
@@ -401,7 +401,7 @@ const Printing = () => {
                                         render={({ field }) => (
                                             <FormItem>
                                                 <FormControl>
-                                                    <Input {...field} type="number" min="1" placeholder="Bodies" className="bg-background border-input rounded-sm font-mono" data-testid="bodies-count" />
+                                                    <Input {...field} type="number" min="1" placeholder="Bodies" aria-label="Bodies" className="bg-background border-input rounded-sm font-mono" data-testid="bodies-count" />
                                                 </FormControl>
                                                 <FormMessage />
                                             </FormItem>
@@ -507,7 +507,7 @@ const Printing = () => {
                                             <FormItem>
                                                 <Select value={field.value} onValueChange={field.onChange}>
                                                     <FormControl>
-                                                        <SelectTrigger className="bg-background border-input rounded-sm" data-testid="edit-container-size"><SelectValue placeholder="Size" /></SelectTrigger>
+                                                        <SelectTrigger aria-label="Size" className="bg-background border-input rounded-sm" data-testid="edit-container-size"><SelectValue placeholder="Size" /></SelectTrigger>
                                                     </FormControl>
                                                     <SelectContent className="bg-card border-border rounded-sm">{sizes.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
                                                 </Select>
@@ -522,7 +522,7 @@ const Printing = () => {
                                             <FormItem>
                                                 <Select value={field.value} onValueChange={field.onChange}>
                                                     <FormControl>
-                                                        <SelectTrigger className="bg-background border-input rounded-sm" data-testid="edit-brand-select"><SelectValue placeholder="Brand" /></SelectTrigger>
+                                                        <SelectTrigger aria-label="Brand" className="bg-background border-input rounded-sm" data-testid="edit-brand-select"><SelectValue placeholder="Brand" /></SelectTrigger>
                                                     </FormControl>
                                                     <SelectContent className="bg-card border-border rounded-sm max-h-60">{brands.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
                                                 </Select>
@@ -536,7 +536,7 @@ const Printing = () => {
                                         render={({ field }) => (
                                             <FormItem>
                                                 <FormControl>
-                                                    <Input {...field} type="number" min="1" placeholder="Bodies" className="bg-background border-input rounded-sm font-mono" data-testid="edit-bodies-count" />
+                                                    <Input {...field} type="number" min="1" placeholder="Bodies" aria-label="Bodies" className="bg-background border-input rounded-sm font-mono" data-testid="edit-bodies-count" />
                                                 </FormControl>
                                                 <FormMessage />
                                             </FormItem>
@@ -627,7 +627,7 @@ const Printing = () => {
                                     <SortableHeader label="Brand" sortKey="brand_name" currentSortKey={sortKey} currentSortDir={sortDir} onSort={requestSort} />
                                     <SortableHeader label="Bodies" sortKey="bodies_count" currentSortKey={sortKey} currentSortDir={sortDir} onSort={requestSort} />
                                     <SortableHeader label="Total Printing" sortKey="total_printing" currentSortKey={sortKey} currentSortDir={sortDir} onSort={requestSort} />
-                                    <th>By</th><th>Updated By</th><th></th></tr></thead>
+                                    <th>By</th><th>Updated By</th><th><span className="sr-only">Actions</span></th></tr></thead>
                                 <tbody>
                                     {paginatedJobs.map((row, idx) => (
                                         <tr key={row._rowKey} data-testid={`job-row-${row._rowKey}`}>

@@ -269,14 +269,18 @@ const Dispatch = () => {
                                 render={({ field }) => (
                                     <FormItem>
                                         <FormLabel className={LABEL_CLASS}>Customer *</FormLabel>
-                                        <SearchableSelect
-                                            options={customers.map(c => ({ value: c.name, label: c.name }))}
-                                            value={field.value}
-                                            onValueChange={field.onChange}
-                                            placeholder="Select customer"
-                                            searchPlaceholder="Search customers..."
-                                            data-testid="dispatch-customer"
-                                        />
+                                        {/* FormControl injects the id the label points at, plus
+                                            aria-invalid/aria-describedby, onto the combobox trigger. */}
+                                        <FormControl>
+                                            <SearchableSelect
+                                                options={customers.map(c => ({ value: c.name, label: c.name }))}
+                                                value={field.value}
+                                                onValueChange={field.onChange}
+                                                placeholder="Select customer"
+                                                searchPlaceholder="Search customers..."
+                                                data-testid="dispatch-customer"
+                                            />
+                                        </FormControl>
                                         <FormMessage />
                                     </FormItem>
                                 )}
@@ -293,7 +297,7 @@ const Dispatch = () => {
                                             <FormItem>
                                                 <Select value={field.value} onValueChange={field.onChange}>
                                                     <FormControl>
-                                                        <SelectTrigger className="bg-background border-input rounded-sm" data-testid="dispatch-brand"><SelectValue placeholder="Brand" /></SelectTrigger>
+                                                        <SelectTrigger aria-label="Brand" className="bg-background border-input rounded-sm" data-testid="dispatch-brand"><SelectValue placeholder="Brand" /></SelectTrigger>
                                                     </FormControl>
                                                     <SelectContent className="bg-card border-border rounded-sm max-h-60">{brands.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
                                                 </Select>
@@ -308,7 +312,7 @@ const Dispatch = () => {
                                             <FormItem>
                                                 <Select value={field.value} onValueChange={field.onChange}>
                                                     <FormControl>
-                                                        <SelectTrigger className="bg-background border-input rounded-sm" data-testid="dispatch-size"><SelectValue placeholder="Size" /></SelectTrigger>
+                                                        <SelectTrigger aria-label="Size" className="bg-background border-input rounded-sm" data-testid="dispatch-size"><SelectValue placeholder="Size" /></SelectTrigger>
                                                     </FormControl>
                                                     <SelectContent className="bg-card border-border rounded-sm">{sizes.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent>
                                                 </Select>
@@ -322,7 +326,7 @@ const Dispatch = () => {
                                         render={({ field }) => (
                                             <FormItem>
                                                 <FormControl>
-                                                    <Input {...field} type="number" min="1" placeholder="Qty" className="bg-background border-input rounded-sm font-mono" data-testid="dispatch-quantity" />
+                                                    <Input {...field} type="number" min="1" placeholder="Qty" aria-label="Quantity" className="bg-background border-input rounded-sm font-mono" data-testid="dispatch-quantity" />
                                                 </FormControl>
                                                 <FormMessage />
                                             </FormItem>
@@ -336,7 +340,7 @@ const Dispatch = () => {
                                     render={({ field }) => (
                                         <FormItem>
                                             <FormControl>
-                                                <Input {...field} placeholder="Item notes (optional)" className="bg-background border-input rounded-sm text-sm" data-testid="dispatch-item-notes" />
+                                                <Input {...field} placeholder="Item notes (optional)" aria-label="Item notes" className="bg-background border-input rounded-sm text-sm" data-testid="dispatch-item-notes" />
                                             </FormControl>
                                             <FormMessage />
                                         </FormItem>
@@ -413,7 +417,7 @@ const Dispatch = () => {
                                     <SortableHeader label="Brand" sortKey="brand_name" currentSortKey={sortKey} currentSortDir={sortDir} onSort={requestSort} />
                                     <th>Size</th>
                                     <SortableHeader label="Qty" sortKey="quantity" currentSortKey={sortKey} currentSortDir={sortDir} onSort={requestSort} />
-                                    <th>Notes</th><th>By</th><th>Updated By</th><th></th></tr></thead>
+                                    <th>Notes</th><th>By</th><th>Updated By</th><th><span className="sr-only">Actions</span></th></tr></thead>
                                 <tbody>
                                     {paginatedDispatches.map((d, idx) => (
                                         <tr key={d._rowKey} data-testid={`dispatch-row-${d._rowKey}`}>

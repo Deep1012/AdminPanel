@@ -10,6 +10,7 @@ import { Badge } from '../components/ui/badge';
 import { Switch } from '../components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import ConfirmDialog from '../components/ConfirmDialog';
+import ReconcilePanel from '../components/admin/ReconcilePanel';
 import TableSearch from '../components/TableSearch';
 import TablePagination from '../components/TablePagination';
 import { useTableFilter } from '../hooks/useTableFilter';
@@ -248,7 +249,7 @@ const Admin = () => {
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="data-table" data-testid="users-table">
-                                <thead><tr><th>#</th><th>Username</th><th>Email</th><th>Role</th><th>Created</th><th>Locked</th><th></th></tr></thead>
+                                <thead><tr><th>#</th><th>Username</th><th>Email</th><th>Role</th><th>Created</th><th>Locked</th><th><span className="sr-only">Actions</span></th></tr></thead>
                                 <tbody>
                                     {paginatedUsers.map((user, idx) => (
                                         <tr key={user.id} data-testid={`user-row-${user.id}`}>
@@ -278,6 +279,8 @@ const Admin = () => {
                     <TablePagination currentPage={currentPage} totalPages={totalPages} pageSize={pageSize} totalItems={filteredUsers.length} startIndex={startIndex} onPageChange={setCurrentPage} onPageSizeChange={setPageSize} pageSizeOptions={PAGE_SIZE_OPTIONS} />
                 </CardContent>
             </Card>
+
+            <ReconcilePanel />
         </div>
     );
 };

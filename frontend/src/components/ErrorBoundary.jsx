@@ -25,7 +25,7 @@ class ErrorBoundary extends React.Component {
     }
 
     componentDidCatch(error, errorInfo) {
-        // eslint-disable-next-line no-console
+        // no-console allows console.error (eslint.config.js), so no directive needed.
         console.error('Unhandled render error:', error, errorInfo);
     }
 

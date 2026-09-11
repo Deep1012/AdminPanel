@@ -32,7 +32,7 @@ const GreetingBanner = () => {
                     {getGreeting()}, {user?.username || 'User'}
                 </h1>
                 <p className="text-sm text-muted-foreground mt-1">
-                    Here's what's happening with your production today.
+                    Here&apos;s what&apos;s happening with your production today.
                 </p>
             </div>
             <Badge variant="outline" className="self-start sm:self-center flex items-center gap-2 px-3 py-1.5 text-sm font-mono border-primary/30 text-primary">

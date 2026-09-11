@@ -168,7 +168,7 @@ const Brands = () => {
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="data-table" data-testid="brands-table">
-                                <thead><tr><th>#</th><th>Name</th><th>LWBF</th><th>Created</th><th></th></tr></thead>
+                                <thead><tr><th>#</th><th>Name</th><th>LWBF</th><th>Created</th><th><span className="sr-only">Actions</span></th></tr></thead>
                                 <tbody>
                                     {paginatedBrands.map((brand, idx) => (
                                         <tr key={brand.id} data-testid={`brand-row-${brand.id}`}>

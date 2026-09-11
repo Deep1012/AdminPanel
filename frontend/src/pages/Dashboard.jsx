@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs';
@@ -36,7 +36,6 @@ const ACTIVITY_LABELS = {
 };
 
 const Dashboard = () => {
-    const navigate = useNavigate();
     const [stats, setStats] = useState(null);
     const [productionTrend, setProductionTrend] = useState([]);
     const [trendPeriod, setTrendPeriod] = useState('monthly');
@@ -46,6 +45,9 @@ const Dashboard = () => {
     const [loading, setLoading] = useState(true);
     const [selectedDate, setSelectedDate] = useState('');
 
+    // Mount-only on purpose: fetchData reads selectedDate, but date changes
+    // are handled by the stats-only effect below. Re-running this one on a
+    // date change would refetch all five panels.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => { fetchData(); }, []);
 
@@ -79,7 +81,6 @@ const Dashboard = () => {
         };
         fetchDateStats();
         return () => { ignore = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedDate]);
 
     const fetchData = async () => {
@@ -283,10 +284,10 @@ const Dashboard = () => {
                         ) : (
                             <div className="space-y-3">
                                 {poSummary.latest.map((po, idx) => (
-                                    <div
+                                    <Link
                                         key={idx}
-                                        className="flex items-center justify-between p-2 rounded-sm hover:bg-secondary/50 transition-colors cursor-pointer"
-                                        onClick={() => navigate('/purchase-orders')}
+                                        to="/purchase-orders"
+                                        className="flex items-center justify-between p-2 rounded-sm hover:bg-secondary/50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                         data-testid={`po-alert-${idx}`}
                                     >
                                         <div className="flex-1 min-w-0">
@@ -297,15 +298,16 @@ const Dashboard = () => {
                                             <p className="text-sm font-mono font-bold">{formatNumber(po.quantity)}</p>
                                             <p className="text-xs text-muted-foreground">{formatNumber(po.quantity_dispatched || 0)} dispatched</p>
                                         </div>
-                                    </div>
+                                    </Link>
                                 ))}
                                 {(poSummary.total_count || 0) > 5 && (
-                                    <p
-                                        className="text-xs text-primary cursor-pointer hover:underline text-center pt-2"
-                                        onClick={() => navigate('/purchase-orders')}
+                                    <Link
+                                        to="/purchase-orders"
+                                        className="block text-xs text-primary cursor-pointer hover:underline text-center pt-2"
+                                        data-testid="po-view-all"
                                     >
                                         View all {poSummary.total_count} orders
-                                    </p>
+                                    </Link>
                                 )}
                             </div>
                         )}

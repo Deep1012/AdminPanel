@@ -377,7 +377,7 @@ const Purchase = () => {
                                     {sh('Supplier', 'supplier')}
                                     <th>By</th>
                                     <th>Updated By</th>
-                                    <th></th>
+                                    <th><span className="sr-only">Actions</span></th>
                                 </tr></thead>
                                 <tbody>
                                     {paginatedPurchases.map((p, idx) => (
